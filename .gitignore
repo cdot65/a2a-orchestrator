@@ -8,3 +8,4 @@ recipes/
 workspace/
 dist/
 *.egg-info/
+.claude/
