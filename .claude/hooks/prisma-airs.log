@@ -1,0 +1,6 @@
+[Mon Apr 20 10:07:09 CDT 2026] PreToolUse MCP Hook: Scanning mcp__ccd_session__mark_chapter request
+[Mon Apr 20 10:07:09 CDT 2026] MCP Request: Scanning '{"title":"Task 1: Project scaffold","summary":"Creating project skeleton with pyproject.toml, ruff.toml, Makefile, .env.example, .gitignore, package structure, and tests"}' for mcp__ccd_session__mark_chapter (171 chars)
+[Mon Apr 20 10:07:10 CDT 2026] MCP Request Result: action=allow, category=benign
+[Mon Apr 20 10:07:10 CDT 2026] ✅ ALLOWED MCP REQUEST: mcp__ccd_session__mark_chapter (benign) [scan:19f40a54-09e2-469a-b6cb-b26355d4c0cb]
+[Mon Apr 20 10:07:10 CDT 2026] 🔍 mcp__ccd_session__mark_chapter: PostToolUse hook triggered
+[Mon Apr 20 10:07:10 CDT 2026] 🔍 mcp__ccd_session__mark_chapter: Extracted content length: 77
