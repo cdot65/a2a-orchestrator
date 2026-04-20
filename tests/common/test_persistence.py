@@ -42,6 +42,14 @@ def test_save_recipe_omits_chef_notes_section_when_none(tmp_path, monkeypatch):
     assert "## Chef Notes" not in md
 
 
+def test_save_recipe_omits_source_url_line_when_none(tmp_path, monkeypatch):
+    monkeypatch.setenv("RECIPES_DIR", str(tmp_path))
+    recipe = _sample_recipe().model_copy(update={"source_url": None})
+    paths = save_recipe(recipe)
+    md = paths.md_path.read_text()
+    assert "Source:" not in md
+
+
 def test_save_recipe_filenames_use_slug_and_timestamp(tmp_path, monkeypatch):
     monkeypatch.setenv("RECIPES_DIR", str(tmp_path))
     paths = save_recipe(_sample_recipe())

@@ -18,7 +18,7 @@ def _recipes_dir() -> Path:
 
 def _render_markdown(recipe: Recipe) -> str:
     parts = [f"# {recipe.title}", "", recipe.description, ""]
-    if recipe.source_url:
+    if recipe.source_url is not None:
         parts += [f"Source: {recipe.source_url}", ""]
 
     parts += ["## Ingredients", ""]
@@ -30,7 +30,7 @@ def _render_markdown(recipe: Recipe) -> str:
     parts += ["", "## Cooking Steps", ""]
     parts += [f"{n}. {s}" for n, s in enumerate(recipe.cooking_steps, 1)]
 
-    if recipe.chef_notes:
+    if recipe.chef_notes is not None:
         parts += ["", "## Chef Notes", "", recipe.chef_notes]
 
     parts.append("")
@@ -48,7 +48,7 @@ def save_recipe(recipe: Recipe) -> SavedPaths:
     json_path = out_dir / f"{base}.json"
     md_path = out_dir / f"{base}.md"
 
-    json_path.write_text(recipe.model_dump_json(indent=2))
-    md_path.write_text(_render_markdown(recipe))
+    json_path.write_text(recipe.model_dump_json(indent=2), encoding="utf-8")
+    md_path.write_text(_render_markdown(recipe), encoding="utf-8")
 
     return SavedPaths(json_path=json_path, md_path=md_path)
