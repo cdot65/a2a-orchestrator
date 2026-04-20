@@ -221,15 +221,20 @@ async def list_models() -> dict:
     },
 )
 async def chat_completions(request: ChatCompletionRequest):
-    # Extract last user message
-    user_content: str | None = None
-    for msg in reversed(request.messages):
-        if msg.role == "user":
-            user_content = msg.content
-            break
-
-    if not user_content:
+    if not request.messages:
+        raise HTTPException(status_code=400, detail="No messages provided.")
+    if not any(m.role == "user" for m in request.messages):
         raise HTTPException(status_code=400, detail="No user message found in messages.")
+
+    # Build a single transcript string from the full message history so the
+    # planner and synthesizer both see prior turns. This enables standard
+    # OpenAI-style multi-turn where the client passes back the full history
+    # on each request.
+    transcript_parts: list[str] = []
+    for msg in request.messages:
+        role = msg.role.upper() if msg.role != "assistant" else "ASSISTANT"
+        transcript_parts.append(f"{role}: {msg.content}")
+    user_content = "\n\n".join(transcript_parts)
 
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
