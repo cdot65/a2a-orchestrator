@@ -110,25 +110,20 @@ def test_chat_completions_streaming():
     # Parse JSON frames (all except [DONE])
     chunks = []
     for frame in frames[:-1]:
-        payload = frame[len("data: "):]
+        payload = frame[len("data: ") :]
         chunks.append(json.loads(payload))
 
     assert all(c["object"] == "chat.completion.chunk" for c in chunks)
 
     # At least one chunk contains "hello" or "world"
-    all_content = "".join(
-        c["choices"][0]["delta"].get("content", "") or ""
-        for c in chunks
-    )
+    all_content = "".join(c["choices"][0]["delta"].get("content", "") or "" for c in chunks)
     assert "hello" in all_content or "world" in all_content
 
     # Final non-[DONE] chunk has finish_reason="stop"
     assert chunks[-1]["choices"][0]["finish_reason"] == "stop"
 
     # First content chunk has role="assistant"
-    content_chunks = [
-        c for c in chunks if c["choices"][0]["delta"].get("content")
-    ]
+    content_chunks = [c for c in chunks if c["choices"][0]["delta"].get("content")]
     assert content_chunks[0]["choices"][0]["delta"]["role"] == "assistant"
 
 

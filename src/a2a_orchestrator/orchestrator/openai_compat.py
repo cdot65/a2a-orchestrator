@@ -215,6 +215,7 @@ async def chat_completions(request: ChatCompletionRequest):
     model = request.model
 
     if request.stream:
+
         async def sse_gen():
             first = True
             task_id = uuid4().hex
