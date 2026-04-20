@@ -8,5 +8,6 @@ resources:
   - deployment-recipe-url.yaml
   - deployment-recipe-gen.yaml
   - deployment-orchestrator.yaml
+  - middleware-ratelimit.yaml
   - ingressroute.yaml
   # Secret is created manually — do NOT list it here.

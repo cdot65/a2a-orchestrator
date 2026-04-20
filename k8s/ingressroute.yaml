@@ -14,6 +14,8 @@ spec:
   routes:
     - match: Host(`a2a.dev.cdot.io`)
       kind: Rule
+      middlewares:
+        - name: a2a-ratelimit
       services:
         - name: orchestrator
           port: 8000
