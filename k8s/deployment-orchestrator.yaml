@@ -41,6 +41,11 @@ spec:
               value: claude-haiku-4-5-20251001
             - name: LOG_FORMAT
               value: json
+            # Per-source-IP rate limit. Enforced by the in-app middleware
+            # (src/a2a_orchestrator/common/ratelimit.py). Applies to every
+            # route including the mounted A2A JSON-RPC surface.
+            - name: RATE_LIMIT
+              value: "50/minute"
             # Shell agent excluded: relies on Docker container spawning which is
             # incompatible with k8s. K8s-native sandbox (Job API / gVisor) is
             # follow-up work. See k8s/README.md for details.
