@@ -1,0 +1,2568 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "A2A Protocol",
+    "version": "0.1.0",
+    "description": "Common OpenAPI 3.1 surface for all A2A-protocol agents in this repo. Each agent exposes a GET endpoint for its Agent Card and a POST JSON-RPC endpoint for task execution."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8000",
+      "description": "A2A Orchestrator Agent"
+    },
+    {
+      "url": "http://localhost:8001",
+      "description": "A2A Recipe URL Parser Agent"
+    },
+    {
+      "url": "http://localhost:8002",
+      "description": "A2A Recipe Generator Agent"
+    },
+    {
+      "url": "http://localhost:8003",
+      "description": "A2A Shell Agent"
+    }
+  ],
+  "paths": {
+    "/.well-known/agent-card.json": {
+      "get": {
+        "summary": "Agent Card",
+        "description": "Returns the static Agent Card describing this agent's capabilities.",
+        "responses": {
+          "200": {
+            "description": "Agent Card",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentCard"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "post": {
+        "summary": "A2A JSON-RPC endpoint",
+        "description": "Accepts JSON-RPC 2.0 requests. Primary methods:\n- `message/send` \u2014 send a message and receive a single response\n- `message/stream` \u2014 send a message and receive an SSE stream\n\nAdditional methods (not fully described here): `tasks/get`, `tasks/cancel`.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/SendMessageRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SendStreamingMessageRequest"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "method",
+                  "mapping": {
+                    "message/send": "#/components/schemas/SendMessageRequest",
+                    "message/stream": "#/components/schemas/SendStreamingMessageRequest"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response. Content-Type is `application/json` for `message/send`, or `text/event-stream` (SSE) for `message/stream`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendMessageResponse"
+                },
+                "examples": {
+                  "message_send": {
+                    "summary": "message/send success",
+                    "value": {
+                      "jsonrpc": "2.0",
+                      "id": "1",
+                      "result": {
+                        "id": "task-abc",
+                        "status": {
+                          "state": "completed"
+                        },
+                        "artifacts": [
+                          {
+                            "parts": [
+                              {
+                                "kind": "text",
+                                "text": "Done!"
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "Server-Sent Events stream. Each event's `data` field contains a JSON-serialised `SendStreamingMessageResponse`."
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON-RPC error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JSONRPCErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "APIKeySecurityScheme": {
+        "description": "Defines a security scheme using an API key.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "in": {
+            "$ref": "#/components/schemas/In"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "type": {
+            "const": "apiKey",
+            "default": "apiKey",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "in",
+          "name"
+        ],
+        "title": "APIKeySecurityScheme",
+        "type": "object"
+      },
+      "AgentCapabilities": {
+        "description": "Defines optional capabilities supported by an agent.",
+        "properties": {
+          "extensions": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AgentExtension"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Extensions"
+          },
+          "pushNotifications": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Pushnotifications"
+          },
+          "stateTransitionHistory": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Statetransitionhistory"
+          },
+          "streaming": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Streaming"
+          }
+        },
+        "title": "AgentCapabilities",
+        "type": "object"
+      },
+      "AgentCardSignature": {
+        "description": "AgentCardSignature represents a JWS signature of an AgentCard.\nThis follows the JSON format of an RFC 7515 JSON Web Signature (JWS).",
+        "properties": {
+          "header": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Header"
+          },
+          "protected": {
+            "title": "Protected",
+            "type": "string"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "protected",
+          "signature"
+        ],
+        "title": "AgentCardSignature",
+        "type": "object"
+      },
+      "AgentExtension": {
+        "description": "A declaration of a protocol extension supported by an Agent.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Params"
+          },
+          "required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Required"
+          },
+          "uri": {
+            "title": "Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "title": "AgentExtension",
+        "type": "object"
+      },
+      "AgentInterface": {
+        "description": "Declares a combination of a target URL and a transport protocol for interacting with the agent.\nThis allows agents to expose the same functionality over multiple transport mechanisms.",
+        "properties": {
+          "transport": {
+            "examples": [
+              "JSONRPC",
+              "GRPC",
+              "HTTP+JSON"
+            ],
+            "title": "Transport",
+            "type": "string"
+          },
+          "url": {
+            "examples": [
+              "https://api.example.com/a2a/v1",
+              "https://grpc.example.com/a2a",
+              "https://rest.example.com/v1"
+            ],
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transport",
+          "url"
+        ],
+        "title": "AgentInterface",
+        "type": "object"
+      },
+      "AgentProvider": {
+        "description": "Represents the service provider of an agent.",
+        "properties": {
+          "organization": {
+            "title": "Organization",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "organization",
+          "url"
+        ],
+        "title": "AgentProvider",
+        "type": "object"
+      },
+      "AgentSkill": {
+        "description": "Represents a distinct capability or function that an agent can perform.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "examples": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "examples": [
+              [
+                "I need a recipe for bread"
+              ]
+            ],
+            "title": "Examples"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "inputModes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Inputmodes"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "outputModes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Outputmodes"
+          },
+          "security": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "examples": [
+              [
+                {
+                  "google": [
+                    "oidc"
+                  ]
+                }
+              ]
+            ],
+            "title": "Security"
+          },
+          "tags": {
+            "examples": [
+              [
+                "cooking",
+                "customer support",
+                "billing"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "description",
+          "id",
+          "name",
+          "tags"
+        ],
+        "title": "AgentSkill",
+        "type": "object"
+      },
+      "AuthorizationCodeOAuthFlow": {
+        "description": "Defines configuration details for the OAuth 2.0 Authorization Code flow.",
+        "properties": {
+          "authorizationUrl": {
+            "title": "Authorizationurl",
+            "type": "string"
+          },
+          "refreshUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Refreshurl"
+          },
+          "scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "object"
+          },
+          "tokenUrl": {
+            "title": "Tokenurl",
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorizationUrl",
+          "scopes",
+          "tokenUrl"
+        ],
+        "title": "AuthorizationCodeOAuthFlow",
+        "type": "object"
+      },
+      "ClientCredentialsOAuthFlow": {
+        "description": "Defines configuration details for the OAuth 2.0 Client Credentials flow.",
+        "properties": {
+          "refreshUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Refreshurl"
+          },
+          "scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "object"
+          },
+          "tokenUrl": {
+            "title": "Tokenurl",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scopes",
+          "tokenUrl"
+        ],
+        "title": "ClientCredentialsOAuthFlow",
+        "type": "object"
+      },
+      "HTTPAuthSecurityScheme": {
+        "description": "Defines a security scheme using HTTP authentication.",
+        "properties": {
+          "bearerFormat": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bearerformat"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "scheme": {
+            "title": "Scheme",
+            "type": "string"
+          },
+          "type": {
+            "const": "http",
+            "default": "http",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scheme"
+        ],
+        "title": "HTTPAuthSecurityScheme",
+        "type": "object"
+      },
+      "ImplicitOAuthFlow": {
+        "description": "Defines configuration details for the OAuth 2.0 Implicit flow.",
+        "properties": {
+          "authorizationUrl": {
+            "title": "Authorizationurl",
+            "type": "string"
+          },
+          "refreshUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Refreshurl"
+          },
+          "scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "object"
+          }
+        },
+        "required": [
+          "authorizationUrl",
+          "scopes"
+        ],
+        "title": "ImplicitOAuthFlow",
+        "type": "object"
+      },
+      "In": {
+        "description": "The location of the API key.",
+        "enum": [
+          "cookie",
+          "header",
+          "query"
+        ],
+        "title": "In",
+        "type": "string"
+      },
+      "MutualTLSSecurityScheme": {
+        "description": "Defines a security scheme using mTLS authentication.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "type": {
+            "const": "mutualTLS",
+            "default": "mutualTLS",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "MutualTLSSecurityScheme",
+        "type": "object"
+      },
+      "OAuth2SecurityScheme": {
+        "description": "Defines a security scheme using OAuth 2.0.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "flows": {
+            "$ref": "#/components/schemas/OAuthFlows"
+          },
+          "oauth2MetadataUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Oauth2Metadataurl"
+          },
+          "type": {
+            "const": "oauth2",
+            "default": "oauth2",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "flows"
+        ],
+        "title": "OAuth2SecurityScheme",
+        "type": "object"
+      },
+      "OAuthFlows": {
+        "description": "Defines the configuration for the supported OAuth 2.0 flows.",
+        "properties": {
+          "authorizationCode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorizationCodeOAuthFlow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "clientCredentials": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClientCredentialsOAuthFlow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "implicit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ImplicitOAuthFlow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "password": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PasswordOAuthFlow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "title": "OAuthFlows",
+        "type": "object"
+      },
+      "OpenIdConnectSecurityScheme": {
+        "description": "Defines a security scheme using OpenID Connect.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "openIdConnectUrl": {
+            "title": "Openidconnecturl",
+            "type": "string"
+          },
+          "type": {
+            "const": "openIdConnect",
+            "default": "openIdConnect",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "openIdConnectUrl"
+        ],
+        "title": "OpenIdConnectSecurityScheme",
+        "type": "object"
+      },
+      "PasswordOAuthFlow": {
+        "description": "Defines configuration details for the OAuth 2.0 Resource Owner Password flow.",
+        "properties": {
+          "refreshUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Refreshurl"
+          },
+          "scopes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "object"
+          },
+          "tokenUrl": {
+            "title": "Tokenurl",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scopes",
+          "tokenUrl"
+        ],
+        "title": "PasswordOAuthFlow",
+        "type": "object"
+      },
+      "SecurityScheme": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/APIKeySecurityScheme"
+          },
+          {
+            "$ref": "#/components/schemas/HTTPAuthSecurityScheme"
+          },
+          {
+            "$ref": "#/components/schemas/OAuth2SecurityScheme"
+          },
+          {
+            "$ref": "#/components/schemas/OpenIdConnectSecurityScheme"
+          },
+          {
+            "$ref": "#/components/schemas/MutualTLSSecurityScheme"
+          }
+        ],
+        "title": "SecurityScheme"
+      },
+      "AgentCard": {
+        "description": "The AgentCard is a self-describing manifest for an agent. It provides essential\nmetadata including the agent's identity, capabilities, skills, supported\ncommunication methods, and security requirements.",
+        "properties": {
+          "additionalInterfaces": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AgentInterface"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Additionalinterfaces"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/AgentCapabilities"
+          },
+          "defaultInputModes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Defaultinputmodes",
+            "type": "array"
+          },
+          "defaultOutputModes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Defaultoutputmodes",
+            "type": "array"
+          },
+          "description": {
+            "examples": [
+              "Agent that helps users with recipes and cooking."
+            ],
+            "title": "Description",
+            "type": "string"
+          },
+          "documentationUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Documentationurl"
+          },
+          "iconUrl": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Iconurl"
+          },
+          "name": {
+            "examples": [
+              "Recipe Agent"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "preferredTransport": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "JSONRPC",
+            "examples": [
+              "JSONRPC",
+              "GRPC",
+              "HTTP+JSON"
+            ],
+            "title": "Preferredtransport"
+          },
+          "protocolVersion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "0.3.0",
+            "title": "Protocolversion"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentProvider"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "security": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "examples": [
+              [
+                {
+                  "oauth": [
+                    "read"
+                  ]
+                },
+                {
+                  "api-key": [],
+                  "mtls": []
+                }
+              ]
+            ],
+            "title": "Security"
+          },
+          "securitySchemes": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/SecurityScheme"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Securityschemes"
+          },
+          "signatures": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AgentCardSignature"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Signatures"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSkill"
+            },
+            "title": "Skills",
+            "type": "array"
+          },
+          "supportsAuthenticatedExtendedCard": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Supportsauthenticatedextendedcard"
+          },
+          "url": {
+            "examples": [
+              "https://api.example.com/a2a/v1"
+            ],
+            "title": "Url",
+            "type": "string"
+          },
+          "version": {
+            "examples": [
+              "1.0.0"
+            ],
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "capabilities",
+          "defaultInputModes",
+          "defaultOutputModes",
+          "description",
+          "name",
+          "skills",
+          "url",
+          "version"
+        ],
+        "title": "AgentCard",
+        "type": "object"
+      },
+      "DataPart": {
+        "description": "Represents a structured data segment (e.g., JSON) within a message or artifact.",
+        "properties": {
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "kind": {
+            "const": "data",
+            "default": "data",
+            "title": "Kind",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Metadata"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "title": "DataPart",
+        "type": "object"
+      },
+      "FilePart": {
+        "description": "Represents a file segment within a message or artifact. The file content can be\nprovided either directly as bytes or as a URI.",
+        "properties": {
+          "file": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FileWithBytes"
+              },
+              {
+                "$ref": "#/components/schemas/FileWithUri"
+              }
+            ],
+            "title": "File"
+          },
+          "kind": {
+            "const": "file",
+            "default": "file",
+            "title": "Kind",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Metadata"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "FilePart",
+        "type": "object"
+      },
+      "FileWithBytes": {
+        "description": "Represents a file with its content provided directly as a base64-encoded string.",
+        "properties": {
+          "bytes": {
+            "title": "Bytes",
+            "type": "string"
+          },
+          "mimeType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mimetype"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          }
+        },
+        "required": [
+          "bytes"
+        ],
+        "title": "FileWithBytes",
+        "type": "object"
+      },
+      "FileWithUri": {
+        "description": "Represents a file with its content located at a specific URI.",
+        "properties": {
+          "mimeType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mimetype"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "uri": {
+            "title": "Uri",
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "title": "FileWithUri",
+        "type": "object"
+      },
+      "Part": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/TextPart"
+          },
+          {
+            "$ref": "#/components/schemas/FilePart"
+          },
+          {
+            "$ref": "#/components/schemas/DataPart"
+          }
+        ],
+        "title": "Part"
+      },
+      "Role": {
+        "title": "Role",
+        "type": "string",
+        "enum": [
+          "agent",
+          "user"
+        ],
+        "description": "The role of the message sender."
+      },
+      "TextPart": {
+        "description": "Represents a text segment within a message or artifact.",
+        "properties": {
+          "kind": {
+            "const": "text",
+            "default": "text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Metadata"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TextPart",
+        "type": "object"
+      },
+      "Message": {
+        "description": "Represents a single message in the conversation between a user and an agent.",
+        "properties": {
+          "contextId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Contextid"
+          },
+          "extensions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Extensions"
+          },
+          "kind": {
+            "const": "message",
+            "default": "message",
+            "title": "Kind",
+            "type": "string"
+          },
+          "messageId": {
+            "title": "Messageid",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Metadata"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/Part"
+            },
+            "title": "Parts",
+            "type": "array"
+          },
+          "referenceTaskIds": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Referencetaskids"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Taskid"
+          }
+        },
+        "required": [
+          "messageId",
+          "parts",
+          "role"
+        ],
+        "title": "Message",
+        "type": "object"
+      },
+      "MessageSendConfiguration": {
+        "description": "Defines configuration options for a `message/send` or `message/stream` request.",
+        "properties": {
+          "acceptedOutputModes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Acceptedoutputmodes"
+          },
+          "blocking": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Blocking"
+          },
+          "historyLength": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Historylength"
+          },
+          "pushNotificationConfig": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PushNotificationConfig"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "title": "MessageSendConfiguration",
+        "type": "object"
+      },
+      "MessageSendParams": {
+        "description": "Defines the parameters for a request to send a message to an agent. This can be used\nto create a new task, continue an existing one, or restart a task.",
+        "properties": {
+          "configuration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MessageSendConfiguration"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "message": {
+            "$ref": "#/components/schemas/Message"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Metadata"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "MessageSendParams",
+        "type": "object"
+      },
+      "PushNotificationAuthenticationInfo": {
+        "description": "Defines authentication details for a push notification endpoint.",
+        "properties": {
+          "credentials": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Credentials"
+          },
+          "schemes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Schemes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "schemes"
+        ],
+        "title": "PushNotificationAuthenticationInfo",
+        "type": "object"
+      },
+      "PushNotificationConfig": {
+        "description": "Defines the configuration for setting up push notifications for task updates.",
+        "properties": {
+          "authentication": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PushNotificationAuthenticationInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          },
+          "token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Token"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "PushNotificationConfig",
+        "type": "object"
+      },
+      "SendMessageRequest": {
+        "description": "Represents a JSON-RPC request for the `message/send` method.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "jsonrpc": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Jsonrpc",
+            "type": "string"
+          },
+          "method": {
+            "const": "message/send",
+            "default": "message/send",
+            "title": "Method",
+            "type": "string"
+          },
+          "params": {
+            "$ref": "#/components/schemas/MessageSendParams"
+          }
+        },
+        "required": [
+          "id",
+          "params"
+        ],
+        "title": "SendMessageRequest",
+        "type": "object"
+      },
+      "Artifact": {
+        "description": "Represents a file, data structure, or other resource generated by an agent during a task.",
+        "properties": {
+          "artifactId": {
+            "title": "Artifactid",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "extensions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Extensions"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Metadata"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/Part"
+            },
+            "title": "Parts",
+            "type": "array"
+          }
+        },
+        "required": [
+          "artifactId",
+          "parts"
+        ],
+        "title": "Artifact",
+        "type": "object"
+      },
+      "Task": {
+        "description": "Represents a single, stateful operation or conversation between a client and an agent.",
+        "properties": {
+          "artifacts": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Artifact"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Artifacts"
+          },
+          "contextId": {
+            "title": "Contextid",
+            "type": "string"
+          },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Message"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "History"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "task",
+            "default": "task",
+            "title": "Kind",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Metadata"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          }
+        },
+        "required": [
+          "contextId",
+          "id",
+          "status"
+        ],
+        "title": "Task",
+        "type": "object"
+      },
+      "TaskState": {
+        "title": "TaskState",
+        "type": "string",
+        "enum": [
+          "submitted",
+          "working",
+          "input-required",
+          "completed",
+          "canceled",
+          "failed",
+          "rejected",
+          "auth-required",
+          "unknown"
+        ],
+        "description": "The lifecycle state of a task."
+      },
+      "TaskStatus": {
+        "description": "Represents the status of a task at a specific point in time.",
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Message"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "state": {
+            "$ref": "#/components/schemas/TaskState"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "examples": [
+              "2023-10-27T10:00:00Z"
+            ],
+            "title": "Timestamp"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "TaskStatus",
+        "type": "object"
+      },
+      "SendMessageSuccessResponse": {
+        "description": "Represents a successful JSON-RPC response for the `message/send` method.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          },
+          "jsonrpc": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Jsonrpc",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Task"
+              },
+              {
+                "$ref": "#/components/schemas/Message"
+              }
+            ],
+            "title": "Result"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "SendMessageSuccessResponse",
+        "type": "object"
+      },
+      "AuthenticatedExtendedCardNotConfiguredError": {
+        "description": "An A2A-specific error indicating that the agent does not have an Authenticated Extended Card configured",
+        "properties": {
+          "code": {
+            "const": -32007,
+            "default": -32007,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Authenticated Extended Card is not configured",
+            "title": "Message"
+          }
+        },
+        "title": "AuthenticatedExtendedCardNotConfiguredError",
+        "type": "object"
+      },
+      "ContentTypeNotSupportedError": {
+        "description": "An A2A-specific error indicating an incompatibility between the requested\ncontent types and the agent's capabilities.",
+        "properties": {
+          "code": {
+            "const": -32005,
+            "default": -32005,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Incompatible content types",
+            "title": "Message"
+          }
+        },
+        "title": "ContentTypeNotSupportedError",
+        "type": "object"
+      },
+      "InternalError": {
+        "description": "An error indicating an internal error on the server.",
+        "properties": {
+          "code": {
+            "const": -32603,
+            "default": -32603,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Internal error",
+            "title": "Message"
+          }
+        },
+        "title": "InternalError",
+        "type": "object"
+      },
+      "InvalidAgentResponseError": {
+        "description": "An A2A-specific error indicating that the agent returned a response that\ndoes not conform to the specification for the current method.",
+        "properties": {
+          "code": {
+            "const": -32006,
+            "default": -32006,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Invalid agent response",
+            "title": "Message"
+          }
+        },
+        "title": "InvalidAgentResponseError",
+        "type": "object"
+      },
+      "InvalidParamsError": {
+        "description": "An error indicating that the method parameters are invalid.",
+        "properties": {
+          "code": {
+            "const": -32602,
+            "default": -32602,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Invalid parameters",
+            "title": "Message"
+          }
+        },
+        "title": "InvalidParamsError",
+        "type": "object"
+      },
+      "InvalidRequestError": {
+        "description": "An error indicating that the JSON sent is not a valid Request object.",
+        "properties": {
+          "code": {
+            "const": -32600,
+            "default": -32600,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Request payload validation error",
+            "title": "Message"
+          }
+        },
+        "title": "InvalidRequestError",
+        "type": "object"
+      },
+      "JSONParseError": {
+        "description": "An error indicating that the server received invalid JSON.",
+        "properties": {
+          "code": {
+            "const": -32700,
+            "default": -32700,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Invalid JSON payload",
+            "title": "Message"
+          }
+        },
+        "title": "JSONParseError",
+        "type": "object"
+      },
+      "JSONRPCError": {
+        "description": "Represents a JSON-RPC 2.0 Error object, included in an error response.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "JSONRPCError",
+        "type": "object"
+      },
+      "JSONRPCErrorResponse": {
+        "description": "Represents a JSON-RPC 2.0 Error Response object.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JSONRPCError"
+              },
+              {
+                "$ref": "#/components/schemas/JSONParseError"
+              },
+              {
+                "$ref": "#/components/schemas/InvalidRequestError"
+              },
+              {
+                "$ref": "#/components/schemas/MethodNotFoundError"
+              },
+              {
+                "$ref": "#/components/schemas/InvalidParamsError"
+              },
+              {
+                "$ref": "#/components/schemas/InternalError"
+              },
+              {
+                "$ref": "#/components/schemas/TaskNotFoundError"
+              },
+              {
+                "$ref": "#/components/schemas/TaskNotCancelableError"
+              },
+              {
+                "$ref": "#/components/schemas/PushNotificationNotSupportedError"
+              },
+              {
+                "$ref": "#/components/schemas/UnsupportedOperationError"
+              },
+              {
+                "$ref": "#/components/schemas/ContentTypeNotSupportedError"
+              },
+              {
+                "$ref": "#/components/schemas/InvalidAgentResponseError"
+              },
+              {
+                "$ref": "#/components/schemas/AuthenticatedExtendedCardNotConfiguredError"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          },
+          "jsonrpc": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Jsonrpc",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "JSONRPCErrorResponse",
+        "type": "object"
+      },
+      "MethodNotFoundError": {
+        "description": "An error indicating that the requested method does not exist or is not available.",
+        "properties": {
+          "code": {
+            "const": -32601,
+            "default": -32601,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Method not found",
+            "title": "Message"
+          }
+        },
+        "title": "MethodNotFoundError",
+        "type": "object"
+      },
+      "PushNotificationNotSupportedError": {
+        "description": "An A2A-specific error indicating that the agent does not support push notifications.",
+        "properties": {
+          "code": {
+            "const": -32003,
+            "default": -32003,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Push Notification is not supported",
+            "title": "Message"
+          }
+        },
+        "title": "PushNotificationNotSupportedError",
+        "type": "object"
+      },
+      "TaskNotCancelableError": {
+        "description": "An A2A-specific error indicating that the task is in a state where it cannot be canceled.",
+        "properties": {
+          "code": {
+            "const": -32002,
+            "default": -32002,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Task cannot be canceled",
+            "title": "Message"
+          }
+        },
+        "title": "TaskNotCancelableError",
+        "type": "object"
+      },
+      "TaskNotFoundError": {
+        "description": "An A2A-specific error indicating that the requested task ID was not found.",
+        "properties": {
+          "code": {
+            "const": -32001,
+            "default": -32001,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "Task not found",
+            "title": "Message"
+          }
+        },
+        "title": "TaskNotFoundError",
+        "type": "object"
+      },
+      "UnsupportedOperationError": {
+        "description": "An A2A-specific error indicating that the requested operation is not supported by the agent.",
+        "properties": {
+          "code": {
+            "const": -32004,
+            "default": -32004,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "This operation is not supported",
+            "title": "Message"
+          }
+        },
+        "title": "UnsupportedOperationError",
+        "type": "object"
+      },
+      "SendMessageResponse": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/JSONRPCErrorResponse"
+          },
+          {
+            "$ref": "#/components/schemas/SendMessageSuccessResponse"
+          }
+        ],
+        "title": "SendMessageResponse"
+      },
+      "SendStreamingMessageRequest": {
+        "description": "Represents a JSON-RPC request for the `message/stream` method.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Id"
+          },
+          "jsonrpc": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Jsonrpc",
+            "type": "string"
+          },
+          "method": {
+            "const": "message/stream",
+            "default": "message/stream",
+            "title": "Method",
+            "type": "string"
+          },
+          "params": {
+            "$ref": "#/components/schemas/MessageSendParams"
+          }
+        },
+        "required": [
+          "id",
+          "params"
+        ],
+        "title": "SendStreamingMessageRequest",
+        "type": "object"
+      },
+      "SendStreamingMessageSuccessResponse": {
+        "description": "Represents a successful JSON-RPC response for the `message/stream` method.\nThe server may send multiple response objects for a single request.",
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          },
+          "jsonrpc": {
+            "const": "2.0",
+            "default": "2.0",
+            "title": "Jsonrpc",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Task"
+              },
+              {
+                "$ref": "#/components/schemas/Message"
+              },
+              {
+                "$ref": "#/components/schemas/TaskStatusUpdateEvent"
+              },
+              {
+                "$ref": "#/components/schemas/TaskArtifactUpdateEvent"
+              }
+            ],
+            "title": "Result"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "title": "SendStreamingMessageSuccessResponse",
+        "type": "object"
+      },
+      "TaskArtifactUpdateEvent": {
+        "description": "An event sent by the agent to notify the client that an artifact has been\ngenerated or updated. This is typically used in streaming models.",
+        "properties": {
+          "append": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Append"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/Artifact"
+          },
+          "contextId": {
+            "title": "Contextid",
+            "type": "string"
+          },
+          "kind": {
+            "const": "artifact-update",
+            "default": "artifact-update",
+            "title": "Kind",
+            "type": "string"
+          },
+          "lastChunk": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Lastchunk"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Metadata"
+          },
+          "taskId": {
+            "title": "Taskid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifact",
+          "contextId",
+          "taskId"
+        ],
+        "title": "TaskArtifactUpdateEvent",
+        "type": "object"
+      },
+      "TaskStatusUpdateEvent": {
+        "description": "An event sent by the agent to notify the client of a change in a task's status.\nThis is typically used in streaming or subscription models.",
+        "properties": {
+          "contextId": {
+            "title": "Contextid",
+            "type": "string"
+          },
+          "final": {
+            "title": "Final",
+            "type": "boolean"
+          },
+          "kind": {
+            "const": "status-update",
+            "default": "status-update",
+            "title": "Kind",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Metadata"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "taskId": {
+            "title": "Taskid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contextId",
+          "final",
+          "status",
+          "taskId"
+        ],
+        "title": "TaskStatusUpdateEvent",
+        "type": "object"
+      },
+      "SendStreamingMessageResponse": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/JSONRPCErrorResponse"
+          },
+          {
+            "$ref": "#/components/schemas/SendStreamingMessageSuccessResponse"
+          }
+        ],
+        "title": "SendStreamingMessageResponse"
+      }
+    }
+  }
+}
