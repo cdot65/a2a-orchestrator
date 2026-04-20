@@ -98,16 +98,15 @@ curl -s -X POST http://localhost:8000/v1/chat/completions \
 
 ## Deploy to Kubernetes
 
-See [`k8s/README.md`](k8s/README.md) for full instructions (Talos + Traefik + TLS).
+Live at `https://a2a.dev.cdot.io` on the Talos home cluster. CI (`.github/workflows/deploy-talos.yml`) deploys automatically on every push to `main`.
 
-Quick path:
+- **Full instructions:** [`k8s/README.md`](k8s/README.md)
+- **One-time cluster setup:** [`k8s/cluster-setup/README.md`](k8s/cluster-setup/README.md) (namespace, secrets, runner RBAC)
+
+Quick manual redeploy:
 
 ```bash
-docker build -t ghcr.io/cdot65/a2a-orchestrator:latest .
-docker push ghcr.io/cdot65/a2a-orchestrator:latest
-kubectl -n a2a create secret generic anthropic --from-literal=ANTHROPIC_API_KEY=sk-ant-...
-# edit k8s/ingressroute.yaml hostname, then:
-kubectl apply -k k8s/
+kubectl -n a2a rollout restart deployment/orchestrator deployment/recipe-url deployment/recipe-gen
 ```
 
 The shell agent is excluded from the k8s deployment (requires Docker-in-Docker for sandboxing).

@@ -24,10 +24,12 @@ spec:
         fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
+      imagePullSecrets:
+        - name: ghcr-login-secret
       containers:
         - name: app
-          image: ghcr.io/cdot65/a2a-orchestrator:latest
-          imagePullPolicy: IfNotPresent
+          image: ghcr.io/cdot65/a2a-orchestrator:talos
+          imagePullPolicy: Always
           args: ["a2a_orchestrator.recipe_gen"]
           ports:
             - name: http

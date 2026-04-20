@@ -1,83 +1,38 @@
 # Kubernetes Deployment (Talos + Traefik)
 
-Deploys the orchestrator, recipe-url, and recipe-gen agents into namespace `a2a` on a Talos Kubernetes cluster. Traefik handles TLS termination via an `IngressRoute` CRD.
+Deploys the orchestrator, recipe-url, and recipe-gen agents into namespace `a2a` on a Talos Kubernetes cluster. Traefik handles TLS termination via an `IngressRoute` CRD using the `*.cdot.io` wildcard cert.
 
 ## Why shell agent is excluded
 
 The shell agent spawns Docker containers for command sandboxing. That pattern is incompatible with Kubernetes without significant redesign (Job API, gVisor, or similar). It is excluded from this deployment. K8s-native sandbox support is follow-up work.
 
-## Prerequisites
+## One-time cluster setup
 
-- Talos Kubernetes cluster (any recent version)
-- Traefik installed with a `websecure` entrypoint on port 443
-- cert-manager (recommended) or a pre-provisioned TLS certificate
-- `kubectl` with cluster access
-- Docker (to build and push the image)
+See [`k8s/cluster-setup/README.md`](cluster-setup/README.md) for the steps you run once: creating the namespace, mirroring the GHCR pull secret and wildcard TLS secret from `truffles-dev`, creating the Anthropic API key secret, and deploying the self-hosted runner RBAC + Deployment.
 
-## Build and push the image
+## Per-deploy (automated via CI)
 
-```bash
-docker build -t ghcr.io/cdot65/a2a-orchestrator:latest .
-docker push ghcr.io/cdot65/a2a-orchestrator:latest
-```
+`.github/workflows/deploy-talos.yml` runs on every push to `main` that touches `src/**`, `Dockerfile`, `k8s/**`, etc., and on `workflow_dispatch`. It:
 
-## Deploy
+1. Builds and pushes `ghcr.io/cdot65/a2a-orchestrator:talos` (+ SHA tag) via `docker buildx`.
+2. Runs `kubectl rollout restart` on all three Deployments in `a2a`.
+3. Waits for rollout and pod readiness.
 
-### 1. Create namespace
+Runner: self-hosted on Talos (`[self-hosted, talos]` labels), registered to this repo by the `a2a-runner` Deployment.
+
+## Manual redeploy
 
 ```bash
-kubectl apply -f k8s/namespace.yaml
-```
-
-### 2. Create the Anthropic API key secret
-
-```bash
-kubectl -n a2a create secret generic anthropic \
-  --from-literal=ANTHROPIC_API_KEY=sk-ant-...
-```
-
-### 3. Provide a TLS certificate
-
-Option A — cert-manager (recommended): create a `Certificate` resource or use an `Issuer`/`ClusterIssuer` annotation strategy that targets secret `a2a-tls` in namespace `a2a`.
-
-Option B — manual:
-
-```bash
-kubectl -n a2a create secret tls a2a-tls --cert=tls.crt --key=tls.key
-```
-
-### 4. Customize the IngressRoute hostname
-
-Edit `k8s/ingressroute.yaml` and replace `a2a.example.com` with your actual domain.
-
-### 5. Apply everything
-
-```bash
-kubectl apply -k k8s/
+kubectl -n a2a rollout restart deployment/orchestrator
+kubectl -n a2a rollout restart deployment/recipe-url
+kubectl -n a2a rollout restart deployment/recipe-gen
 ```
 
 ## Verify
 
 ```bash
 kubectl -n a2a get pods,svc,ingressroute
-```
-
-All three pods should reach `Running` state with readiness probes passing on `/.well-known/agent-card.json`.
-
-## Smoke test
-
-```bash
-# Agent card via HTTPS
-curl -sk https://a2a.example.com/.well-known/agent-card.json | jq .
-
-# OpenAI-compat model list
-curl -sk https://a2a.example.com/v1/models | jq .
-
-# Chat completion
-curl -sk -X POST https://a2a.example.com/v1/chat/completions \
-  -H 'content-type: application/json' \
-  -d '{"model":"a2a-orchestrator","messages":[{"role":"user","content":"Give me a vegan ramen recipe"}],"stream":false}' \
-  | jq .
+curl -sk https://a2a.dev.cdot.io/.well-known/agent-card.json | jq .
 ```
 
 ## Customization
