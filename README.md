@@ -54,6 +54,48 @@ curl -N -X POST http://localhost:8000/ \
 
 Generated recipes land in `./recipes/` as `.json` and `.md`.
 
+### API Reference
+
+**Static OpenAPI specs** — pre-generated, always available:
+
+| File | Description |
+|------|-------------|
+| `docs/openapi/orchestrator.openapi.json` | Full spec: A2A + OpenAI-compat paths |
+| `docs/openapi/recipe-url.openapi.json` | Recipe URL parser |
+| `docs/openapi/recipe-gen.openapi.json` | Recipe generator |
+| `docs/openapi/shell.openapi.json` | Shell agent |
+| `docs/openapi/a2a-protocol.openapi.json` | Shared A2A protocol surface |
+
+Each running agent also serves its spec at runtime:
+
+```bash
+curl http://localhost:8000/openapi.json   # orchestrator (A2A + OpenAI-compat)
+curl http://localhost:8001/openapi.json   # recipe-url
+curl http://localhost:8002/openapi.json   # recipe-gen
+curl http://localhost:8003/openapi.json   # shell
+```
+
+**OpenAI-compatible chat API** (orchestrator only):
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/models` | List available models |
+| `POST /v1/chat/completions` | Chat completion (set `"stream": true` for SSE) |
+| `GET /v1/openapi.json` | FastAPI-generated spec for the OpenAI-compat surface only |
+| `GET /v1/docs` | Swagger UI for the OpenAI-compat surface |
+
+Example:
+
+```bash
+curl -s -X POST http://localhost:8000/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "a2a-orchestrator",
+    "messages": [{"role": "user", "content": "Give me a vegan ramen recipe"}],
+    "stream": false
+  }' | jq .
+```
+
 ## Test
 
 ```bash

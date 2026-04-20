@@ -24,8 +24,10 @@ from a2a.types import (
     TaskStatusUpdateEvent,
     TextPart,
 )
+from fastapi import FastAPI
 
 from a2a_orchestrator.orchestrator.executor import build_card as orch_build_card
+from a2a_orchestrator.orchestrator.openai_compat import router as openai_router
 from a2a_orchestrator.recipe_gen.executor import build_card as gen_build_card
 from a2a_orchestrator.recipe_url.executor import build_card as url_build_card
 from a2a_orchestrator.shell.executor import build_card as shell_build_card
@@ -36,6 +38,7 @@ OUT_DIR = pathlib.Path(__file__).parent.parent / "docs" / "openapi"
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _rewrite_refs(obj: object) -> object:
     """Recursively rewrite '#/$defs/Foo' -> '#/components/schemas/Foo'."""
@@ -127,9 +130,7 @@ def _make_jsonrpc_post_operation(schemas: dict) -> dict:  # noqa: ARG001
                         "discriminator": {
                             "propertyName": "method",
                             "mapping": {
-                                "message/send": (
-                                    "#/components/schemas/SendMessageRequest"
-                                ),
+                                "message/send": ("#/components/schemas/SendMessageRequest"),
                                 "message/stream": (
                                     "#/components/schemas/SendStreamingMessageRequest"
                                 ),
@@ -264,8 +265,31 @@ def _agent_spec(
 
 
 # ---------------------------------------------------------------------------
+# OpenAI-compat merge helpers (orchestrator only)
+# ---------------------------------------------------------------------------
+
+
+def _openai_compat_subschema() -> dict:
+    """Build a throwaway FastAPI app to extract the OpenAI-compat OpenAPI schema."""
+    temp = FastAPI(title="oai", version="0", docs_url=None, redoc_url=None)
+    temp.include_router(openai_router)
+    return temp.openapi()
+
+
+def _merge_into_orchestrator(base: dict) -> dict:
+    """Merge OpenAI-compat paths + schemas into the orchestrator spec."""
+    sub = _openai_compat_subschema()
+    base.setdefault("paths", {}).update(sub.get("paths", {}))
+    base.setdefault("components", {}).setdefault("schemas", {}).update(
+        sub.get("components", {}).get("schemas", {})
+    )
+    return base
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -321,6 +345,13 @@ def main() -> None:
             card_example=a["card"],
             example_name=a["example_name"],
         )
+        if a["filename"] == "orchestrator.openapi.json":
+            spec["info"]["description"] = (
+                "A2A Orchestrator Agent. Exposes the A2A JSON-RPC protocol "
+                "(POST /, GET /.well-known/agent-card.json) and an OpenAI-compatible "
+                "chat API surface (GET /v1/models, POST /v1/chat/completions)."
+            )
+            spec = _merge_into_orchestrator(spec)
         _write(OUT_DIR / a["filename"], spec)
 
     print("Generated files:")
