@@ -1,4 +1,5 @@
 import re
+import unicodedata
 
 from pydantic import BaseModel, Field
 
@@ -22,5 +23,7 @@ _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
 def slugify(title: str) -> str:
-    lower = title.lower().strip()
+    normalized = unicodedata.normalize("NFKD", title)
+    ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+    lower = ascii_only.lower().strip()
     return _SLUG_RE.sub("-", lower).strip("-")

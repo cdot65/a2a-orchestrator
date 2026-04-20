@@ -55,6 +55,8 @@ def test_recipe_json_schema_has_expected_properties():
         ("Spicy Vegan Ramen", "spicy-vegan-ramen"),
         ("Mom's Best Cookies!", "mom-s-best-cookies"),
         ("  weird   spacing ", "weird-spacing"),
+        ("Crème Brûlée", "creme-brulee"),
+        ("", ""),
     ],
 )
 def test_slugify(title, expected):
