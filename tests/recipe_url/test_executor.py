@@ -89,3 +89,45 @@ async def test_executor_fails_on_non_url_input():
 
     statuses = [getattr(e, "state", None) for e in queue.events]
     assert "failed" in statuses
+
+
+@respx.mock
+async def test_executor_fails_on_claude_validation_error():
+    respx.get(SAMPLE_URL).mock(
+        return_value=httpx.Response(200, text="<html><body>content</body></html>")
+    )
+    queue = _FakeQueue()
+    ctx = _FakeContext(SAMPLE_URL)
+
+    bad_payload = {"title": "x"}  # missing required fields
+
+    with patch(
+        "a2a_orchestrator.recipe_url.executor.call_with_schema",
+        return_value=bad_payload,
+    ), patch("a2a_orchestrator.recipe_url.executor.get_client", return_value=MagicMock()):
+        await RecipeUrlExecutor().execute(ctx, queue)
+
+    statuses = [getattr(e, "state", None) for e in queue.events]
+    assert "failed" in statuses
+    failed_event = next(e for e in queue.events if getattr(e, "state", None) == "failed")
+    assert "schema" in failed_event.message.lower()
+
+
+@respx.mock
+async def test_executor_fails_on_claude_runtime_error():
+    respx.get(SAMPLE_URL).mock(
+        return_value=httpx.Response(200, text="<html><body>content</body></html>")
+    )
+    queue = _FakeQueue()
+    ctx = _FakeContext(SAMPLE_URL)
+
+    with patch(
+        "a2a_orchestrator.recipe_url.executor.call_with_schema",
+        side_effect=RuntimeError("no tool_use"),
+    ), patch("a2a_orchestrator.recipe_url.executor.get_client", return_value=MagicMock()):
+        await RecipeUrlExecutor().execute(ctx, queue)
+
+    statuses = [getattr(e, "state", None) for e in queue.events]
+    assert "failed" in statuses
+    failed_event = next(e for e in queue.events if getattr(e, "state", None) == "failed")
+    assert "structuring failed" in failed_event.message.lower()

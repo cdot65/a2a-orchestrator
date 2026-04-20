@@ -109,7 +109,15 @@ class RecipeUrlExecutor:
             )
             return
 
-        paths = save_recipe(recipe)
+        try:
+            paths = save_recipe(recipe)
+        except OSError as e:
+            log.warning("persist_failed", error=str(e), task_id=context.task_id)
+            await event_queue.enqueue_event(
+                _StatusEvent("status", "failed", f"persist failed: {e}")
+            )
+            return
+
         log.info("recipe_saved", task_id=context.task_id, json=str(paths.json_path))
         await event_queue.enqueue_event(
             _ArtifactEvent("artifact", "application/json", recipe.model_dump_json())
