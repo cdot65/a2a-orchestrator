@@ -53,10 +53,17 @@ async def _fetch_card(client: httpx.AsyncClient, base_url: str) -> dict[str, Any
         log.warning("discovery non-200 for %s: %s", base_url, resp.status_code)
         return None
     try:
-        return resp.json()
+        card = resp.json()
     except ValueError:
         log.warning("discovery: %s returned non-JSON", base_url)
         return None
+    # Agents advertise themselves at http://localhost:PORT in their cards,
+    # which is the wrong URL from any other pod/host. Overwrite with the URL
+    # the discoverer actually reached them at so callers can use card["url"]
+    # directly for dispatch.
+    if isinstance(card, dict):
+        card["url"] = base_url.rstrip("/")
+    return card
 
 
 async def discover_agents(base_urls: list[str]) -> list[dict[str, Any]]:
