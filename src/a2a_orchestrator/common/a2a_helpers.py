@@ -1,8 +1,20 @@
 import asyncio
 import logging
 from typing import Any
+from uuid import uuid4
 
 import httpx
+from a2a.types import (
+    Artifact,
+    Message,
+    Part,
+    Role,
+    TaskArtifactUpdateEvent,
+    TaskState,
+    TaskStatus,
+    TaskStatusUpdateEvent,
+    TextPart,
+)
 
 log = logging.getLogger(__name__)
 
@@ -54,3 +66,61 @@ async def discover_agents(ports: list[int]) -> list[dict[str, Any]]:
             return_exceptions=True,
         )
     return [c for c in results if isinstance(c, dict)]
+
+
+def _text_message(text: str) -> Message:
+    return Message(
+        role=Role.agent,
+        parts=[Part(root=TextPart(text=text))],
+        message_id=uuid4().hex,
+    )
+
+
+def status_event(
+    *,
+    task_id: str,
+    context_id: str,
+    state: TaskState,
+    message: str = "",
+    final: bool = False,
+) -> TaskStatusUpdateEvent:
+    return TaskStatusUpdateEvent(
+        task_id=task_id,
+        context_id=context_id,
+        status=TaskStatus(
+            state=state,
+            message=_text_message(message) if message else None,
+        ),
+        final=final,
+    )
+
+
+def text_update(*, task_id: str, context_id: str, text: str) -> TaskStatusUpdateEvent:
+    """Interim streaming text forwarded via status message."""
+    return TaskStatusUpdateEvent(
+        task_id=task_id,
+        context_id=context_id,
+        status=TaskStatus(state=TaskState.working, message=_text_message(text)),
+        final=False,
+    )
+
+
+def artifact_event(
+    *,
+    task_id: str,
+    context_id: str,
+    mime_type: str,
+    text: str,
+    name: str | None = None,
+) -> TaskArtifactUpdateEvent:
+    part = Part(root=TextPart(text=text))
+    return TaskArtifactUpdateEvent(
+        task_id=task_id,
+        context_id=context_id,
+        artifact=Artifact(
+            artifact_id=uuid4().hex,
+            name=name,
+            parts=[part],
+        ),
+        last_chunk=True,
+    )

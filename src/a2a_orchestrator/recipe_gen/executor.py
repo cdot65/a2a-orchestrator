@@ -1,29 +1,15 @@
-from dataclasses import dataclass
 from typing import Any
 
+from a2a.types import TaskState
 from pydantic import ValidationError
 
+from a2a_orchestrator.common.a2a_helpers import artifact_event, status_event
 from a2a_orchestrator.common.claude import call_with_schema, get_client
 from a2a_orchestrator.common.logging import get_logger
 from a2a_orchestrator.common.persistence import save_recipe
 from a2a_orchestrator.common.recipe import Recipe, recipe_json_schema
 
 log = get_logger("recipe-gen")
-
-
-@dataclass
-class _StatusEvent:
-    kind: str  # "status"
-    state: str  # "working" | "completed" | "failed"
-    message: str = ""
-
-
-@dataclass
-class _ArtifactEvent:
-    kind: str  # "artifact"
-    mime_type: str
-    text: str
-
 
 SYSTEM_PROMPT = (
     "You are a recipe generator. Given a prompt, return a complete, realistic recipe "
@@ -60,7 +46,14 @@ class RecipeGenExecutor:
     async def execute(self, context, event_queue) -> None:
         user_text = context.get_user_input()
         log.info("task_started", task_id=context.task_id, prompt=user_text[:120])
-        await event_queue.enqueue_event(_StatusEvent("status", "working", "generating recipe"))
+        await event_queue.enqueue_event(
+            status_event(
+                task_id=context.task_id,
+                context_id=context.context_id,
+                state=TaskState.working,
+                message="generating recipe",
+            )
+        )
 
         try:
             client = get_client()
@@ -77,7 +70,13 @@ class RecipeGenExecutor:
             except ValidationError as ve:
                 log.warning("recipe_validation_failed", errors=ve.errors(), task_id=context.task_id)
                 await event_queue.enqueue_event(
-                    _StatusEvent("status", "failed", "generated recipe did not match schema")
+                    status_event(
+                        task_id=context.task_id,
+                        context_id=context.context_id,
+                        state=TaskState.failed,
+                        message="generated recipe did not match schema",
+                        final=True,
+                    )
                 )
                 return
 
@@ -86,7 +85,13 @@ class RecipeGenExecutor:
             except OSError as e:
                 log.warning("persist_failed", error=str(e), task_id=context.task_id)
                 await event_queue.enqueue_event(
-                    _StatusEvent("status", "failed", f"persist failed: {e}")
+                    status_event(
+                        task_id=context.task_id,
+                        context_id=context.context_id,
+                        state=TaskState.failed,
+                        message=f"persist failed: {e}",
+                        final=True,
+                    )
                 )
                 return
 
@@ -98,15 +103,42 @@ class RecipeGenExecutor:
             )
 
             await event_queue.enqueue_event(
-                _ArtifactEvent("artifact", "application/json", recipe.model_dump_json())
+                artifact_event(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    mime_type="application/json",
+                    text=recipe.model_dump_json(),
+                )
             )
-            await event_queue.enqueue_event(_StatusEvent("status", "completed"))
+            await event_queue.enqueue_event(
+                status_event(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    state=TaskState.completed,
+                    final=True,
+                )
+            )
             log.info("task_completed", task_id=context.task_id)
 
         except Exception as exc:  # noqa: BLE001
             log.exception("task_failed", task_id=context.task_id)
-            await event_queue.enqueue_event(_StatusEvent("status", "failed", str(exc)))
+            await event_queue.enqueue_event(
+                status_event(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    state=TaskState.failed,
+                    message=str(exc),
+                    final=True,
+                )
+            )
 
     async def cancel(self, context, event_queue) -> None:
         log.info("task_cancelled", task_id=getattr(context, "task_id", "?"))
-        await event_queue.enqueue_event(_StatusEvent("status", "cancelled"))
+        await event_queue.enqueue_event(
+            status_event(
+                task_id=getattr(context, "task_id", ""),
+                context_id=getattr(context, "context_id", ""),
+                state=TaskState.canceled,
+                final=True,
+            )
+        )

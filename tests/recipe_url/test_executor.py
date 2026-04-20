@@ -3,8 +3,10 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import respx
+from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
 
 from a2a_orchestrator.recipe_url.executor import RecipeUrlExecutor, build_card
+from tests.conftest import get_state, get_text
 
 SAMPLE_URL = "https://example.com/chili"
 
@@ -63,12 +65,12 @@ async def test_executor_fetches_extracts_and_structures():
     ):
         await RecipeUrlExecutor().execute(ctx, queue)
 
-    artifact_events = [e for e in queue.events if getattr(e, "kind", "") == "artifact"]
+    artifact_events = [e for e in queue.events if isinstance(e, TaskArtifactUpdateEvent)]
     assert artifact_events
-    data = json.loads(artifact_events[0].text)
+    data = json.loads(get_text(artifact_events[0]))
     assert data["source_url"] == SAMPLE_URL
 
-    statuses = [e.state for e in queue.events if getattr(e, "kind", "") == "status"]
+    statuses = [get_state(e) for e in queue.events if isinstance(e, TaskStatusUpdateEvent)]
     assert statuses[-1] == "completed"
 
 
@@ -80,8 +82,8 @@ async def test_executor_fails_on_bad_http_status():
 
     await RecipeUrlExecutor().execute(ctx, queue)
 
-    statuses = [getattr(e, "state", None) for e in queue.events]
-    assert "failed" in statuses
+    states = [get_state(e) for e in queue.events if isinstance(e, TaskStatusUpdateEvent)]
+    assert "failed" in states
 
 
 async def test_executor_fails_on_non_url_input():
@@ -90,8 +92,8 @@ async def test_executor_fails_on_non_url_input():
 
     await RecipeUrlExecutor().execute(ctx, queue)
 
-    statuses = [getattr(e, "state", None) for e in queue.events]
-    assert "failed" in statuses
+    states = [get_state(e) for e in queue.events if isinstance(e, TaskStatusUpdateEvent)]
+    assert "failed" in states
 
 
 @respx.mock
@@ -113,10 +115,12 @@ async def test_executor_fails_on_claude_validation_error():
     ):
         await RecipeUrlExecutor().execute(ctx, queue)
 
-    statuses = [getattr(e, "state", None) for e in queue.events]
-    assert "failed" in statuses
-    failed_event = next(e for e in queue.events if getattr(e, "state", None) == "failed")
-    assert "schema" in failed_event.message.lower()
+    states = [get_state(e) for e in queue.events if isinstance(e, TaskStatusUpdateEvent)]
+    assert "failed" in states
+    failed_event = next(
+        e for e in queue.events if isinstance(e, TaskStatusUpdateEvent) and get_state(e) == "failed"
+    )
+    assert "schema" in get_text(failed_event).lower()
 
 
 @respx.mock
@@ -136,7 +140,9 @@ async def test_executor_fails_on_claude_runtime_error():
     ):
         await RecipeUrlExecutor().execute(ctx, queue)
 
-    statuses = [getattr(e, "state", None) for e in queue.events]
-    assert "failed" in statuses
-    failed_event = next(e for e in queue.events if getattr(e, "state", None) == "failed")
-    assert "structuring failed" in failed_event.message.lower()
+    states = [get_state(e) for e in queue.events if isinstance(e, TaskStatusUpdateEvent)]
+    assert "failed" in states
+    failed_event = next(
+        e for e in queue.events if isinstance(e, TaskStatusUpdateEvent) and get_state(e) == "failed"
+    )
+    assert "structuring failed" in get_text(failed_event).lower()

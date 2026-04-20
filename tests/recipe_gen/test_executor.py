@@ -1,7 +1,10 @@
 import json
 from unittest.mock import MagicMock, patch
 
+from a2a.types import TaskArtifactUpdateEvent, TaskStatusUpdateEvent
+
 from a2a_orchestrator.recipe_gen.executor import RecipeGenExecutor, build_card
+from tests.conftest import get_state
 
 
 def _recipe_payload():
@@ -59,7 +62,7 @@ async def test_executor_generates_and_persists_recipe(monkeypatch):
 
     claude_mock.assert_called_once()
 
-    artifact_events = [e for e in queue.events if getattr(e, "kind", "") == "artifact"]
+    artifact_events = [e for e in queue.events if isinstance(e, TaskArtifactUpdateEvent)]
     assert artifact_events, "expected at least one artifact event"
 
     import os
@@ -71,7 +74,7 @@ async def test_executor_generates_and_persists_recipe(monkeypatch):
     data = json.loads(files[0].read_text())
     assert data["title"] == "Spicy Vegan Ramen"
 
-    statuses = [e.state for e in queue.events if getattr(e, "kind", "") == "status"]
+    statuses = [get_state(e) for e in queue.events if isinstance(e, TaskStatusUpdateEvent)]
     assert statuses[-1] == "completed"
     assert "working" in statuses
 
@@ -90,7 +93,9 @@ async def test_executor_fails_task_on_claude_error():
         executor = RecipeGenExecutor()
         await executor.execute(ctx, queue)
 
-    statuses = [getattr(e, "state", None) for e in queue.events if getattr(e, "state", None)]
+    statuses = [
+        get_state(e) for e in queue.events if isinstance(e, TaskStatusUpdateEvent) and get_state(e)
+    ]
     assert statuses.index("working") < statuses.index("failed")
 
 
@@ -98,5 +103,5 @@ async def test_executor_cancel_enqueues_cancelled_status():
     queue = _FakeQueue()
     ctx = _FakeContext("whatever")
     await RecipeGenExecutor().cancel(ctx, queue)
-    statuses = [getattr(e, "state", None) for e in queue.events]
-    assert "cancelled" in statuses
+    states = [get_state(e) for e in queue.events if isinstance(e, TaskStatusUpdateEvent)]
+    assert "canceled" in states

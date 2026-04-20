@@ -1,31 +1,13 @@
 import json
-from dataclasses import dataclass
 from typing import Any
 
+from a2a.types import TaskState
+
+from a2a_orchestrator.common.a2a_helpers import artifact_event, status_event, text_update
 from a2a_orchestrator.common.logging import get_logger
 from a2a_orchestrator.shell.sandbox import run_sandboxed
 
 log = get_logger("shell")
-
-
-@dataclass
-class _StatusEvent:
-    kind: str
-    state: str
-    message: str = ""
-
-
-@dataclass
-class _TextEvent:
-    kind: str  # "text"
-    text: str
-
-
-@dataclass
-class _ArtifactEvent:
-    kind: str  # "artifact"
-    mime_type: str
-    text: str
 
 
 def build_card(url: str) -> dict[str, Any]:
@@ -54,14 +36,35 @@ class ShellExecutor:
         log.info("task_started", task_id=context.task_id, command=command[:200])
 
         if not command:
-            await event_queue.enqueue_event(_StatusEvent("status", "failed", "empty command"))
+            await event_queue.enqueue_event(
+                status_event(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    state=TaskState.failed,
+                    message="empty command",
+                    final=True,
+                )
+            )
             return
 
-        await event_queue.enqueue_event(_StatusEvent("status", "working", f"running: {command}"))
+        await event_queue.enqueue_event(
+            status_event(
+                task_id=context.task_id,
+                context_id=context.context_id,
+                state=TaskState.working,
+                message=f"running: {command}",
+            )
+        )
 
         async def _on_line(stream: str, line: str) -> None:
             prefix = "" if stream == "stdout" else "[stderr] "
-            await event_queue.enqueue_event(_TextEvent("text", f"{prefix}{line.rstrip()}"))
+            await event_queue.enqueue_event(
+                text_update(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    text=f"{prefix}{line.rstrip()}",
+                )
+            )
 
         result = await run_sandboxed(command, on_line=_on_line, timeout=30.0)
 
@@ -74,11 +77,30 @@ class ShellExecutor:
             "truncated_stderr": result.truncated_stderr,
         }
         await event_queue.enqueue_event(
-            _ArtifactEvent("artifact", "application/json", json.dumps(payload))
+            artifact_event(
+                task_id=context.task_id,
+                context_id=context.context_id,
+                mime_type="application/json",
+                text=json.dumps(payload),
+            )
         )
-        await event_queue.enqueue_event(_StatusEvent("status", "completed"))
+        await event_queue.enqueue_event(
+            status_event(
+                task_id=context.task_id,
+                context_id=context.context_id,
+                state=TaskState.completed,
+                final=True,
+            )
+        )
         log.info("task_completed", task_id=context.task_id, exit_code=result.exit_code)
 
     async def cancel(self, context, event_queue) -> None:
         log.info("task_cancelled", task_id=getattr(context, "task_id", "?"))
-        await event_queue.enqueue_event(_StatusEvent("status", "cancelled"))
+        await event_queue.enqueue_event(
+            status_event(
+                task_id=getattr(context, "task_id", ""),
+                context_id=getattr(context, "context_id", ""),
+                state=TaskState.canceled,
+                final=True,
+            )
+        )

@@ -1,7 +1,10 @@
 from unittest.mock import AsyncMock, patch
 
+from a2a.types import TaskStatusUpdateEvent
+
 from a2a_orchestrator.orchestrator.executor import OrchestratorExecutor, build_card
 from a2a_orchestrator.orchestrator.planner import PlanStep
+from tests.conftest import get_state, get_text
 
 
 class _FakeQueue:
@@ -71,12 +74,12 @@ async def test_executor_plans_dispatches_synthesizes():
     ):
         await OrchestratorExecutor().execute(_Ctx("scrape https://x/y"), q)
 
-    texts = [e.text for e in q.events if getattr(e, "kind", "") == "text"]
-    assert any("Plan:" in t for t in texts)
-    assert any("[recipe-url]" in t for t in texts)
-    assert any("done: " in t or "X" in t for t in texts)
-    statuses = [getattr(e, "state", None) for e in q.events]
-    assert statuses[-1] == "completed"
+    texts = [get_text(e) for e in q.events if isinstance(e, TaskStatusUpdateEvent)]
+    assert any(t and "Plan:" in t for t in texts)
+    assert any(t and "[recipe-url]" in t for t in texts)
+    assert any(t and ("done: " in t or "X" in t) for t in texts)
+    states = [get_state(e) for e in q.events if isinstance(e, TaskStatusUpdateEvent)]
+    assert states[-1] == "completed"
 
 
 async def test_executor_substitutes_placeholders():
@@ -150,5 +153,5 @@ async def test_executor_aborts_on_step_failure():
     ):
         await OrchestratorExecutor().execute(_Ctx("go"), q)
 
-    statuses = [getattr(e, "state", None) for e in q.events]
-    assert "failed" in statuses
+    states = [get_state(e) for e in q.events if isinstance(e, TaskStatusUpdateEvent)]
+    assert "failed" in states

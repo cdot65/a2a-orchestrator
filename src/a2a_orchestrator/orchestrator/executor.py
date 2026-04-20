@@ -1,9 +1,15 @@
 import os
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 from typing import Any
 
-from a2a_orchestrator.common.a2a_helpers import build_agent_card, discover_agents
+from a2a.types import TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
+
+from a2a_orchestrator.common.a2a_helpers import (
+    build_agent_card,
+    discover_agents,
+    status_event,
+    text_update,
+)
 from a2a_orchestrator.common.logging import get_logger
 from a2a_orchestrator.orchestrator.planner import (
     PlanStep,
@@ -13,19 +19,6 @@ from a2a_orchestrator.orchestrator.planner import (
 )
 
 log = get_logger("orchestrator")
-
-
-@dataclass
-class _StatusEvent:
-    kind: str
-    state: str
-    message: str = ""
-
-
-@dataclass
-class _TextEvent:
-    kind: str  # "text"
-    text: str
 
 
 def build_card(url: str) -> dict[str, Any]:
@@ -74,7 +67,7 @@ async def dispatch_step(
         message = Message(
             role=Role.user,
             parts=[TextPart(text=input_text)],
-            messageId=os.urandom(8).hex(),
+            message_id=os.urandom(8).hex(),
         )
         request = SendStreamingMessageRequest(
             id=os.urandom(8).hex(),
@@ -89,23 +82,18 @@ async def dispatch_step(
                 raise RuntimeError(f"{skill} RPC error: {wrapper.root.error}")
             event = wrapper.root.result
 
-            kind = getattr(event, "kind", "") or type(event).__name__.lower()
-            kind_lower = kind.lower() if isinstance(kind, str) else ""
-
-            if "status" in kind_lower:
-                status = getattr(event, "status", None)
-                state = getattr(status, "state", "working")
-                state_str = state.value if hasattr(state, "value") else str(state)
-                msg_obj = getattr(status, "message", None)
-                msg_text = _message_to_text(msg_obj) if msg_obj is not None else ""
+            if isinstance(event, TaskStatusUpdateEvent):
+                status = event.status
+                state_val = status.state
+                state_str = state_val.value if hasattr(state_val, "value") else str(state_val)
+                msg_text = _message_to_text(status.message) if status.message is not None else ""
                 await on_event(("text", f"[{skill}] {state_str}: {msg_text}".rstrip(": ")))
                 if state_str == "failed":
                     raise RuntimeError(f"{skill} failed: {msg_text}")
                 if state_str in terminal_non_completed:
                     raise RuntimeError(f"{skill} ended in terminal state {state_str}: {msg_text}")
-            elif "artifact" in kind_lower:
-                artifact = getattr(event, "artifact", event)
-                parts = getattr(artifact, "parts", [])
+            elif isinstance(event, TaskArtifactUpdateEvent):
+                parts = event.artifact.parts
                 for p in parts:
                     p_root = getattr(p, "root", p)
                     t = getattr(p_root, "text", None)
@@ -138,7 +126,14 @@ class OrchestratorExecutor:
         user_text = context.get_user_input()
         log.info("task_started", task_id=context.task_id, prompt=user_text[:160])
 
-        await event_queue.enqueue_event(_StatusEvent("status", "working", "discovering"))
+        await event_queue.enqueue_event(
+            status_event(
+                task_id=context.task_id,
+                context_id=context.context_id,
+                state=TaskState.working,
+                message="discovering",
+            )
+        )
         ports = [
             int(p)
             for p in os.environ.get("A2A_DISCOVERY_PORTS", "8001,8002,8003").split(",")
@@ -147,12 +142,27 @@ class OrchestratorExecutor:
         cards = await discover_agents(ports)
         log.info("discovery", task_id=context.task_id, agents=[c["name"] for c in cards])
 
-        await event_queue.enqueue_event(_StatusEvent("status", "working", "planning"))
+        await event_queue.enqueue_event(
+            status_event(
+                task_id=context.task_id,
+                context_id=context.context_id,
+                state=TaskState.working,
+                message="planning",
+            )
+        )
         try:
             plan: list[PlanStep] = build_plan(user_text, cards)
         except Exception as e:  # noqa: BLE001
             log.exception("plan_failed")
-            await event_queue.enqueue_event(_StatusEvent("status", "failed", f"plan: {e}"))
+            await event_queue.enqueue_event(
+                status_event(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    state=TaskState.failed,
+                    message=f"plan: {e}",
+                    final=True,
+                )
+            )
             return
 
         plan_summary = (
@@ -160,21 +170,39 @@ class OrchestratorExecutor:
             if plan
             else "Plan: (none — synthesizing directly)"
         )
-        await event_queue.enqueue_event(_TextEvent("text", plan_summary))
+        await event_queue.enqueue_event(
+            text_update(
+                task_id=context.task_id,
+                context_id=context.context_id,
+                text=plan_summary,
+            )
+        )
 
         step_outputs: dict[int, str] = {}
         for idx, step in enumerate(plan, start=1):
             agent_card = next((c for c in cards if c["name"] == step.agent), None)
             if not agent_card:
                 await event_queue.enqueue_event(
-                    _StatusEvent("status", "failed", f"unknown agent {step.agent}")
+                    status_event(
+                        task_id=context.task_id,
+                        context_id=context.context_id,
+                        state=TaskState.failed,
+                        message=f"unknown agent {step.agent}",
+                        final=True,
+                    )
                 )
                 return
             resolved_input = substitute_placeholders(step.input, step_outputs)
 
             async def _on_event(pair: tuple[str, str]) -> None:  # noqa: B023
                 _label, text = pair
-                await event_queue.enqueue_event(_TextEvent("text", text))
+                await event_queue.enqueue_event(
+                    text_update(
+                        task_id=context.task_id,
+                        context_id=context.context_id,
+                        text=text,
+                    )
+                )
 
             try:
                 output = await dispatch_step(
@@ -183,23 +211,64 @@ class OrchestratorExecutor:
             except Exception as e:  # noqa: BLE001
                 log.exception("step_failed", step=idx)
                 await event_queue.enqueue_event(
-                    _StatusEvent("status", "failed", f"step {idx}: {e}")
+                    status_event(
+                        task_id=context.task_id,
+                        context_id=context.context_id,
+                        state=TaskState.failed,
+                        message=f"step {idx}: {e}",
+                        final=True,
+                    )
                 )
                 return
             step_outputs[idx] = output
 
-        await event_queue.enqueue_event(_StatusEvent("status", "working", "synthesizing"))
+        await event_queue.enqueue_event(
+            status_event(
+                task_id=context.task_id,
+                context_id=context.context_id,
+                state=TaskState.working,
+                message="synthesizing",
+            )
+        )
         try:
             async for chunk in synthesize(user_text, step_outputs=step_outputs):
-                await event_queue.enqueue_event(_TextEvent("text", chunk))
+                await event_queue.enqueue_event(
+                    text_update(
+                        task_id=context.task_id,
+                        context_id=context.context_id,
+                        text=chunk,
+                    )
+                )
         except Exception as e:  # noqa: BLE001
             log.exception("synthesis_failed")
-            await event_queue.enqueue_event(_StatusEvent("status", "failed", f"synthesis: {e}"))
+            await event_queue.enqueue_event(
+                status_event(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    state=TaskState.failed,
+                    message=f"synthesis: {e}",
+                    final=True,
+                )
+            )
             return
 
-        await event_queue.enqueue_event(_StatusEvent("status", "completed"))
+        await event_queue.enqueue_event(
+            status_event(
+                task_id=context.task_id,
+                context_id=context.context_id,
+                state=TaskState.completed,
+                final=True,
+            )
+        )
         log.info("task_completed", task_id=context.task_id)
 
     async def cancel(self, context: Any, event_queue: Any) -> None:
         log.info("task_cancelled")
-        await event_queue.enqueue_event(_StatusEvent("status", "canceled"))
+        await event_queue.enqueue_event(
+            status_event(
+                task_id=context.task_id,
+                context_id=context.context_id,
+                state=TaskState.canceled,
+                final=True,
+            )
+        )
