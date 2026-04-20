@@ -369,9 +369,11 @@ curl -N -X POST http://localhost:8000/v1/chat/completions \
 
 Each `data:` frame (except the final `[DONE]`) is a `chat.completion.chunk` with `choices[0].delta.content` holding the text fragment. The last chunk before `[DONE]` has `choices[0].finish_reason: "stop"` and an empty delta.
 
-### Multi-turn chat (with system message)
+### Multi-turn chat — client-managed history
 
-The API accepts the full `messages` array for compatibility with OpenAI clients. However, the orchestrator currently only uses the **last user message** to dispatch to the A2A backend — prior turns and the system message are accepted but not forwarded.
+The OpenAI-compat endpoint accepts the full `messages` array and feeds every turn (user + assistant + system) into the planner and synthesizer. Standard OpenAI-client behavior works: append the assistant's reply to `messages` before sending the next turn.
+
+**Request:**
 
 ```bash
 curl -s -X POST http://localhost:8000/v1/chat/completions \
@@ -379,15 +381,156 @@ curl -s -X POST http://localhost:8000/v1/chat/completions \
   -d '{
     "model": "a2a-orchestrator",
     "messages": [
-      {"role": "system", "content": "You are a helpful cooking assistant."},
-      {"role": "user", "content": "What cuisines use miso?"},
-      {"role": "assistant", "content": "Japanese, Korean, and some fusion cuisines use miso."},
-      {"role": "user", "content": "Give me a miso ramen recipe for 4 people"}
+      {"role": "user", "content": "My favorite cuisine is Thai."},
+      {"role": "assistant", "content": "Got it, Thai is your favorite."},
+      {"role": "user", "content": "Based on that, recommend a dish I should try."}
     ]
-  }' | jq '.choices[0].message.content'
+  }'
 ```
 
-Only `"Give me a miso ramen recipe for 4 people"` is sent to the orchestrator. See `src/a2a_orchestrator/orchestrator/openai_compat.py` for the extraction logic.
+**Response** (abridged):
+
+```json
+{
+  "id": "chatcmpl-<hex>",
+  "object": "chat.completion",
+  "created": 1776712000,
+  "model": "a2a-orchestrator",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Based on your love of Thai cuisine, I'd recommend trying **Pad Thai** — Thailand's most iconic stir-fried noodle dish! ..."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {"prompt_tokens": 0, "completion_tokens": 187, "total_tokens": 187}
+}
+```
+
+The model sees the full history on every turn, so prior context carries forward naturally.
+
+---
+
+## Multi-turn — A2A server-managed via `contextId`
+
+When calling the A2A endpoint (`POST /`), include a stable `contextId` in `params.message.contextId`. The orchestrator stores the user + synthesized assistant text for each completed task and replays it into the planner/synthesizer on subsequent calls under the same `contextId`. History is capped at the last 20 turns per context.
+
+The first response echoes the `contextId` you sent (or mints one if omitted) under `result.contextId`. Thread that value into every later turn.
+
+### Turn 1 — establishes context
+
+**Request:**
+
+```bash
+CTX="session-$(date +%s)"
+curl -sS -X POST http://localhost:8000/ \
+  -H 'content-type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "t1",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "role": "user",
+        "parts": [{"kind": "text", "text": "My favorite cuisine is Thai."}],
+        "messageId": "m1",
+        "contextId": "'"$CTX"'"
+      }
+    }
+  }'
+```
+
+**Response** (abridged — `result.history` contains the full interleaved plan/dispatch/synthesis event stream; the final agent message is the synthesis):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "t1",
+  "result": {
+    "kind": "task",
+    "id": "21ccf933-ad4a-420e-baf3-8674d6bffd27",
+    "contextId": "session-1776712110",
+    "status": {"state": "completed"},
+    "history": [
+      {"role": "user",  "kind": "message", "parts": [{"kind": "text", "text": "My favorite cuisine is Thai."}]},
+      {"role": "agent", "kind": "message", "parts": [{"kind": "text", "text": "discovering"}]},
+      {"role": "agent", "kind": "message", "parts": [{"kind": "text", "text": "planning"}]},
+      {"role": "agent", "kind": "message", "parts": [{"kind": "text", "text": "Plan: 1) recipe-gen:generate_recipe"}]},
+      {"role": "agent", "kind": "message", "parts": [{"kind": "text", "text": "[generate_recipe] working: generating recipe"}]},
+      {"role": "agent", "kind": "message", "parts": [{"kind": "text", "text": "[generate_recipe] artifact received"}]},
+      {"role": "agent", "kind": "message", "parts": [{"kind": "text", "text": "[generate_recipe] completed"}]},
+      {"role": "agent", "kind": "message", "parts": [{"kind": "text", "text": "synthesizing"}]},
+      {"role": "agent", "kind": "message", "parts": [{"kind": "text", "text": "# Pad Thai ..."}]}
+    ]
+  }
+}
+```
+
+### Turn 2 — same `contextId`, model remembers
+
+**Request:**
+
+```bash
+curl -sS -X POST http://localhost:8000/ \
+  -H 'content-type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": "t2",
+    "method": "message/send",
+    "params": {
+      "message": {
+        "role": "user",
+        "parts": [{"kind": "text", "text": "Recommend another dish I should try."}],
+        "messageId": "m2",
+        "contextId": "'"$CTX"'"
+      }
+    }
+  }'
+```
+
+**Response** (synthesized reply references Thai cuisine from turn 1 without it being in the turn-2 prompt):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "t2",
+  "result": {
+    "kind": "task",
+    "id": "d4cc4918-2b7c-45cd-81d2-a6b04c97f982",
+    "contextId": "session-1776712110",
+    "status": {"state": "completed"},
+    "history": [
+      "... plan/dispatch events ...",
+      {"role": "agent", "kind": "message", "parts": [{"kind": "text", "text": "# Tom Kha Gai (Thai Coconut Chicken Soup) — a wonderful next step in your Thai cooking journey after Pad Thai ..."}]}
+    ]
+  }
+}
+```
+
+### Intra-cluster variant
+
+If calling from inside the Kubernetes cluster (where the red-teaming target lives), swap the base URL for the Service DNS name:
+
+```bash
+BASE="http://orchestrator.a2a.svc.cluster.local:8000"
+# same request bodies as above
+```
+
+### Red-team tooling config
+
+For tools that accept a JSON config mapping response/request id fields:
+
+```json
+{
+  "response_id_field": "result.contextId",
+  "request_id_field": "params.message.contextId"
+}
+```
+
+(Your tool must support dotted paths — the A2A envelope is nested. If it only handles flat top-level fields, use the OpenAI-compat endpoint with client-managed history instead.)
 
 ---
 
