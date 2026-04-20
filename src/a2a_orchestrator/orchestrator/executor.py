@@ -134,12 +134,17 @@ class OrchestratorExecutor:
                 message="discovering",
             )
         )
-        ports = [
-            int(p)
-            for p in os.environ.get("A2A_DISCOVERY_PORTS", "8001,8002,8003").split(",")
-            if p.strip()
-        ]
-        cards = await discover_agents(ports)
+        urls_env = os.environ.get("A2A_DISCOVERY_URLS", "").strip()
+        if urls_env:
+            base_urls = [u.strip() for u in urls_env.split(",") if u.strip()]
+        else:
+            ports = [
+                int(p)
+                for p in os.environ.get("A2A_DISCOVERY_PORTS", "8001,8002,8003").split(",")
+                if p.strip()
+            ]
+            base_urls = [f"http://localhost:{p}" for p in ports]
+        cards = await discover_agents(base_urls)
         log.info("discovery", task_id=context.task_id, agents=[c["name"] for c in cards])
 
         await event_queue.enqueue_event(

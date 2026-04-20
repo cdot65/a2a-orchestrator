@@ -1,0 +1,25 @@
+# Traefik IngressRoute — customize before applying.
+#
+# 1. Replace Host(`a2a.example.com`) with your actual domain.
+# 2. Provide a TLS secret named `a2a-tls` in namespace `a2a`:
+#      kubectl -n a2a create secret tls a2a-tls --cert=tls.crt --key=tls.key
+#    Or use cert-manager with a ClusterIssuer (recommended):
+#      annotate this IngressRoute or use a Certificate resource targeting `a2a-tls`.
+# 3. Ensure Traefik has a `websecure` entrypoint configured on port 443.
+
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: a2a-orchestrator
+  namespace: a2a
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`a2a.example.com`)
+      kind: Rule
+      services:
+        - name: orchestrator
+          port: 8000
+  tls:
+    secretName: a2a-tls

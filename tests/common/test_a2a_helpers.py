@@ -43,7 +43,7 @@ async def test_discover_agents_returns_reachable_cards():
         return_value=httpx.Response(500)
     )
 
-    cards = await discover_agents([8001, 8002])
+    cards = await discover_agents(["http://localhost:8001", "http://localhost:8002"])
 
     assert len(cards) == 1
     assert cards[0]["name"] == "recipe-url"
@@ -55,7 +55,7 @@ async def test_discover_agents_skips_connection_errors():
         side_effect=httpx.ConnectError("boom")
     )
 
-    cards = await discover_agents([9999])
+    cards = await discover_agents(["http://localhost:9999"])
     assert cards == []
 
 
@@ -64,5 +64,5 @@ async def test_discover_agents_skips_non_json_body():
     respx.get("http://localhost:8001/.well-known/agent-card.json").mock(
         return_value=httpx.Response(200, text="not-json")
     )
-    cards = await discover_agents([8001])
+    cards = await discover_agents(["http://localhost:8001"])
     assert cards == []

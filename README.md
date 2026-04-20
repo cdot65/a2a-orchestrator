@@ -96,6 +96,22 @@ curl -s -X POST http://localhost:8000/v1/chat/completions \
   }' | jq .
 ```
 
+## Deploy to Kubernetes
+
+See [`k8s/README.md`](k8s/README.md) for full instructions (Talos + Traefik + TLS).
+
+Quick path:
+
+```bash
+docker build -t ghcr.io/cdot65/a2a-orchestrator:latest .
+docker push ghcr.io/cdot65/a2a-orchestrator:latest
+kubectl -n a2a create secret generic anthropic --from-literal=ANTHROPIC_API_KEY=sk-ant-...
+# edit k8s/ingressroute.yaml hostname, then:
+kubectl apply -k k8s/
+```
+
+The shell agent is excluded from the k8s deployment (requires Docker-in-Docker for sandboxing).
+
 ## Test
 
 ```bash

@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+recipes/
+workspace/
+.git/
+.env
+tests/
+docs/superpowers/
+docker/
+k8s/
+*.pyc
+*.pyo
+.DS_Store
