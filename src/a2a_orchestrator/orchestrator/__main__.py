@@ -1,9 +1,15 @@
 import os
 
 import uvicorn
+from a2a.server.apps import A2AStarletteApplication
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types import AgentCard
+from fastapi import FastAPI
 
 from a2a_orchestrator.common.logging import configure_logging
 from a2a_orchestrator.orchestrator.executor import OrchestratorExecutor, build_card
+from a2a_orchestrator.orchestrator.openai_compat import router as openai_router
 
 
 def main() -> None:
@@ -11,18 +17,25 @@ def main() -> None:
     port = int(os.environ.get("ORCHESTRATOR_PORT", "8000"))
     url = f"http://localhost:{port}"
     card_dict = build_card(url)
-
-    from a2a.server.apps import A2AStarletteApplication
-    from a2a.server.request_handlers import DefaultRequestHandler
-    from a2a.server.tasks import InMemoryTaskStore
-    from a2a.types import AgentCard
-
     agent_card = AgentCard.model_validate(card_dict)
+
     handler = DefaultRequestHandler(
         agent_executor=OrchestratorExecutor(),
         task_store=InMemoryTaskStore(),
     )
-    app = A2AStarletteApplication(agent_card=agent_card, http_handler=handler).build()
+    a2a_app = A2AStarletteApplication(agent_card=agent_card, http_handler=handler).build()
+
+    app = FastAPI(
+        title="A2A Orchestrator",
+        description="Orchestrator agent with A2A protocol and OpenAI-compatible chat API.",
+        version="0.1.0",
+        openapi_url="/v1/openapi.json",
+        docs_url="/v1/docs",
+        redoc_url=None,
+    )
+    app.include_router(openai_router)
+    # Mount A2A at root so /.well-known/agent-card.json and POST / still work.
+    app.mount("/", a2a_app)
 
     uvicorn.run(app, host="0.0.0.0", port=port)
 
