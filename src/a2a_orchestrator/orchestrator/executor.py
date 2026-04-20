@@ -60,29 +60,55 @@ async def dispatch_step(
     """Call a child agent via A2A streaming, forward events, return final artifact text."""
     import httpx
     from a2a.client import A2AClient
-    from a2a.types import Message, TextPart
+    from a2a.types import (
+        JSONRPCErrorResponse,
+        Message,
+        MessageSendParams,
+        Role,
+        SendStreamingMessageRequest,
+        TextPart,
+    )
 
     async with httpx.AsyncClient(timeout=None) as http:
         client = A2AClient(httpx_client=http, url=agent_url)
         message = Message(
-            role="user",
+            role=Role.user,
             parts=[TextPart(text=input_text)],
             messageId=os.urandom(8).hex(),
         )
+        request = SendStreamingMessageRequest(
+            id=os.urandom(8).hex(),
+            params=MessageSendParams(message=message),
+        )
+
         final_artifact_text = ""
-        async for event in client.send_message_streaming(message=message):
+        terminal_non_completed = {"canceled", "rejected", "input-required", "auth-required"}
+
+        async for wrapper in client.send_message_streaming(request):
+            if isinstance(wrapper.root, JSONRPCErrorResponse):
+                raise RuntimeError(f"{skill} RPC error: {wrapper.root.error}")
+            event = wrapper.root.result
+
             kind = getattr(event, "kind", "") or type(event).__name__.lower()
-            if "status" in kind.lower():
-                state = getattr(getattr(event, "status", None), "state", "working")
-                msg = getattr(getattr(event, "status", None), "message", "")
-                await on_event(("text", f"[{skill}] {state}: {msg}"))
-                if state == "failed":
-                    raise RuntimeError(f"{skill} failed: {msg}")
-            elif "artifact" in kind.lower():
+            kind_lower = kind.lower() if isinstance(kind, str) else ""
+
+            if "status" in kind_lower:
+                status = getattr(event, "status", None)
+                state = getattr(status, "state", "working")
+                state_str = state.value if hasattr(state, "value") else str(state)
+                msg_obj = getattr(status, "message", None)
+                msg_text = _message_to_text(msg_obj) if msg_obj is not None else ""
+                await on_event(("text", f"[{skill}] {state_str}: {msg_text}".rstrip(": ")))
+                if state_str == "failed":
+                    raise RuntimeError(f"{skill} failed: {msg_text}")
+                if state_str in terminal_non_completed:
+                    raise RuntimeError(f"{skill} ended in terminal state {state_str}: {msg_text}")
+            elif "artifact" in kind_lower:
                 artifact = getattr(event, "artifact", event)
                 parts = getattr(artifact, "parts", [])
                 for p in parts:
-                    t = getattr(p, "text", None)
+                    p_root = getattr(p, "root", p)
+                    t = getattr(p_root, "text", None)
                     if t:
                         final_artifact_text = t
                         await on_event(("text", f"[{skill}] artifact received"))
@@ -90,9 +116,21 @@ async def dispatch_step(
                 text = getattr(event, "text", None)
                 if text:
                     await on_event(("text", f"[{skill}] {text}"))
+
         if not final_artifact_text:
             raise RuntimeError(f"{skill} returned no artifact")
         return final_artifact_text
+
+
+def _message_to_text(msg) -> str:
+    parts = getattr(msg, "parts", [])
+    pieces = []
+    for p in parts:
+        p_root = getattr(p, "root", p)
+        t = getattr(p_root, "text", None)
+        if t:
+            pieces.append(t)
+    return " ".join(pieces)
 
 
 class OrchestratorExecutor:
@@ -166,4 +204,4 @@ class OrchestratorExecutor:
 
     async def cancel(self, context: Any, event_queue: Any) -> None:
         log.info("task_cancelled")
-        await event_queue.enqueue_event(_StatusEvent("status", "cancelled"))
+        await event_queue.enqueue_event(_StatusEvent("status", "canceled"))
