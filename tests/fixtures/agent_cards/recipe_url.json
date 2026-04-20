@@ -1,0 +1,19 @@
+{
+  "name": "recipe-url",
+  "description": "Parse a recipe from a URL.",
+  "url": "http://localhost:8001",
+  "version": "0.1.0",
+  "capabilities": {"streaming": true},
+  "authentication": {"schemes": ["none"]},
+  "skills": [
+    {
+      "id": "parse_recipe_url",
+      "name": "parse_recipe_url",
+      "description": "Fetch a URL and return a structured recipe.",
+      "tags": ["recipe"],
+      "examples": ["https://example.com/ramen"]
+    }
+  ],
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text"]
+}

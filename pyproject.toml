@@ -1,0 +1,34 @@
+[project]
+name = "a2a-orchestrator"
+version = "0.1.0"
+description = "A2A orchestrator with specialist agents for recipes and shell"
+requires-python = ">=3.12"
+dependencies = [
+  "a2a-sdk[http-server]>=0.2",
+  "anthropic>=0.40",
+  "pydantic>=2.7",
+  "httpx>=0.27",
+  "trafilatura>=1.12",
+  "uvicorn>=0.30",
+  "python-dotenv>=1.0",
+  "structlog>=24.1",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "respx>=0.21",
+  "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/a2a_orchestrator"]
