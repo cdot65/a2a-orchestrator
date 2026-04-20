@@ -69,6 +69,10 @@ async def test_executor_generates_and_persists_recipe(monkeypatch):
     data = json.loads(files[0].read_text())
     assert data["title"] == "Spicy Vegan Ramen"
 
+    statuses = [e.state for e in queue.events if getattr(e, "kind", "") == "status"]
+    assert statuses[-1] == "completed"
+    assert "working" in statuses
+
 
 async def test_executor_fails_task_on_claude_error():
     queue = _FakeQueue()
@@ -81,5 +85,13 @@ async def test_executor_fails_task_on_claude_error():
         executor = RecipeGenExecutor()
         await executor.execute(ctx, queue)
 
+    statuses = [getattr(e, "state", None) for e in queue.events if getattr(e, "state", None)]
+    assert statuses.index("working") < statuses.index("failed")
+
+
+async def test_executor_cancel_enqueues_cancelled_status():
+    queue = _FakeQueue()
+    ctx = _FakeContext("whatever")
+    await RecipeGenExecutor().cancel(ctx, queue)
     statuses = [getattr(e, "state", None) for e in queue.events]
-    assert any(s == "failed" for s in statuses)
+    assert "cancelled" in statuses

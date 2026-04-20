@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import ValidationError
+
 from a2a_orchestrator.common.claude import call_with_schema, get_client
 from a2a_orchestrator.common.logging import get_logger
 from a2a_orchestrator.common.persistence import save_recipe
@@ -70,7 +72,15 @@ class RecipeGenExecutor:
                 tool_description="Emit the structured recipe.",
                 schema=recipe_json_schema(),
             )
-            recipe = Recipe(**raw)
+            try:
+                recipe = Recipe(**raw)
+            except ValidationError as ve:
+                log.warning("recipe_validation_failed", errors=ve.errors(), task_id=context.task_id)
+                await event_queue.enqueue_event(
+                    _StatusEvent("status", "failed", "generated recipe did not match schema")
+                )
+                return
+
             paths = save_recipe(recipe)
             log.info(
                 "recipe_saved",
@@ -91,3 +101,4 @@ class RecipeGenExecutor:
 
     async def cancel(self, context, event_queue) -> None:
         log.info("task_cancelled", task_id=getattr(context, "task_id", "?"))
+        await event_queue.enqueue_event(_StatusEvent("status", "cancelled"))
