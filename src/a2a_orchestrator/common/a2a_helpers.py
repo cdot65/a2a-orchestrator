@@ -49,5 +49,8 @@ async def _fetch_card(client: httpx.AsyncClient, port: int) -> dict[str, Any] | 
 
 async def discover_agents(ports: list[int]) -> list[dict[str, Any]]:
     async with httpx.AsyncClient() as client:
-        results = await asyncio.gather(*(_fetch_card(client, p) for p in ports))
-    return [c for c in results if c is not None]
+        results = await asyncio.gather(
+            *(_fetch_card(client, p) for p in ports),
+            return_exceptions=True,
+        )
+    return [c for c in results if isinstance(c, dict)]

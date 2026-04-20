@@ -57,3 +57,12 @@ async def test_discover_agents_skips_connection_errors():
 
     cards = await discover_agents([9999])
     assert cards == []
+
+
+@respx.mock
+async def test_discover_agents_skips_non_json_body():
+    respx.get("http://localhost:8001/.well-known/agent-card.json").mock(
+        return_value=httpx.Response(200, text="not-json")
+    )
+    cards = await discover_agents([8001])
+    assert cards == []
