@@ -280,9 +280,28 @@ def _merge_into_orchestrator(base: dict) -> dict:
     """Merge OpenAI-compat paths + schemas into the orchestrator spec."""
     sub = _openai_compat_subschema()
     base.setdefault("paths", {}).update(sub.get("paths", {}))
-    base.setdefault("components", {}).setdefault("schemas", {}).update(
-        sub.get("components", {}).get("schemas", {})
-    )
+    schemas = base.setdefault("components", {}).setdefault("schemas", {})
+    schemas.update(sub.get("components", {}).get("schemas", {}))
+
+    # FastAPI only auto-emits Pydantic models that appear as request/response
+    # models. The streaming response shape (ChatCompletionChunk) is referenced
+    # via $ref in `responses[200].content['text/event-stream']` which doesn't
+    # trigger inclusion. Inject the missing models explicitly.
+    from a2a_orchestrator.orchestrator import openai_compat as _oai
+
+    for name in (
+        "ChatCompletionChunk",
+        "ChatCompletionChunkChoice",
+        "ChatCompletionDelta",
+    ):
+        if name not in schemas:
+            model = getattr(_oai, name, None)
+            if model is not None:
+                schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
+                # Hoist $defs if present
+                for dname, dschema in schema.pop("$defs", {}).items():
+                    schemas.setdefault(dname, dschema)
+                schemas[name] = schema
     return base
 
 

@@ -149,10 +149,17 @@
         },
         "responses": {
           "200": {
-            "description": "Successful Response",
+            "description": "When stream=false, returns a single ChatCompletionResponse (application/json). When stream=true, returns text/event-stream with one ChatCompletionChunk per data: frame, terminated by 'data: [DONE]'.",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletionResponse"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletionChunk"
+                }
               }
             }
           },
@@ -2607,6 +2614,33 @@
         ],
         "title": "SendStreamingMessageResponse"
       },
+      "ChatCompletionChoice": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ChatMessage"
+          },
+          "finish_reason": {
+            "enum": [
+              "stop",
+              "length",
+              "content_filter",
+              null
+            ],
+            "title": "Finish Reason",
+            "default": "stop"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "message"
+        ],
+        "title": "ChatCompletionChoice"
+      },
       "ChatCompletionRequest": {
         "properties": {
           "model": {
@@ -2654,6 +2688,70 @@
           "messages"
         ],
         "title": "ChatCompletionRequest"
+      },
+      "ChatCompletionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "object": {
+            "type": "string",
+            "const": "chat.completion",
+            "title": "Object",
+            "default": "chat.completion"
+          },
+          "created": {
+            "type": "integer",
+            "title": "Created"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/ChatCompletionChoice"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ChatCompletionUsage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created",
+          "model",
+          "choices",
+          "usage"
+        ],
+        "title": "ChatCompletionResponse"
+      },
+      "ChatCompletionUsage": {
+        "properties": {
+          "prompt_tokens": {
+            "type": "integer",
+            "title": "Prompt Tokens"
+          },
+          "completion_tokens": {
+            "type": "integer",
+            "title": "Completion Tokens"
+          },
+          "total_tokens": {
+            "type": "integer",
+            "title": "Total Tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens"
+        ],
+        "title": "ChatCompletionUsage"
       },
       "ChatMessage": {
         "properties": {
@@ -2730,6 +2828,100 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "ChatCompletionChunkChoice": {
+        "properties": {
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "delta": {
+            "$ref": "#/components/schemas/ChatCompletionDelta"
+          },
+          "finish_reason": {
+            "default": null,
+            "enum": [
+              "stop",
+              "length",
+              null
+            ],
+            "title": "Finish Reason"
+          }
+        },
+        "required": [
+          "index",
+          "delta"
+        ],
+        "title": "ChatCompletionChunkChoice",
+        "type": "object"
+      },
+      "ChatCompletionDelta": {
+        "properties": {
+          "role": {
+            "anyOf": [
+              {
+                "const": "assistant",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Role"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Content"
+          }
+        },
+        "title": "ChatCompletionDelta",
+        "type": "object"
+      },
+      "ChatCompletionChunk": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "object": {
+            "const": "chat.completion.chunk",
+            "default": "chat.completion.chunk",
+            "title": "Object",
+            "type": "string"
+          },
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/ChatCompletionChunkChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "created",
+          "model",
+          "choices"
+        ],
+        "title": "ChatCompletionChunk",
+        "type": "object"
       }
     },
     "examples": {

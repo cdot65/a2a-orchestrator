@@ -198,7 +198,28 @@ async def list_models() -> dict:
     }
 
 
-@router.post("/v1/chat/completions")
+@router.post(
+    "/v1/chat/completions",
+    response_model=ChatCompletionResponse,
+    responses={
+        200: {
+            "description": (
+                "When stream=false, returns a single ChatCompletionResponse "
+                "(application/json). When stream=true, returns text/event-stream "
+                "with one ChatCompletionChunk per data: frame, terminated by "
+                "'data: [DONE]'."
+            ),
+            "content": {
+                "application/json": {
+                    "schema": {"$ref": "#/components/schemas/ChatCompletionResponse"},
+                },
+                "text/event-stream": {
+                    "schema": {"$ref": "#/components/schemas/ChatCompletionChunk"},
+                },
+            },
+        },
+    },
+)
 async def chat_completions(request: ChatCompletionRequest):
     # Extract last user message
     user_content: str | None = None
