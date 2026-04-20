@@ -14,8 +14,12 @@ def _card(name: str, skill_id: str) -> dict:
         "name": name,
         "description": f"{name} desc",
         "skills": [
-            {"id": skill_id, "name": skill_id, "description": f"{skill_id} skill",
-             "examples": ["example input"]}
+            {
+                "id": skill_id,
+                "name": skill_id,
+                "description": f"{skill_id} skill",
+                "examples": ["example input"],
+            }
         ],
     }
 
@@ -33,14 +37,20 @@ def test_build_plan_returns_steps():
     cards = [_card("recipe-url", "parse_recipe_url")]
     fake = {
         "steps": [
-            {"agent": "recipe-url", "skill": "parse_recipe_url",
-             "input": "https://example.com/ramen"}
+            {
+                "agent": "recipe-url",
+                "skill": "parse_recipe_url",
+                "input": "https://example.com/ramen",
+            }
         ]
     }
-    with patch(
-        "a2a_orchestrator.orchestrator.planner.call_with_schema",
-        return_value=fake,
-    ), patch("a2a_orchestrator.orchestrator.planner.get_client", return_value=MagicMock()):
+    with (
+        patch(
+            "a2a_orchestrator.orchestrator.planner.call_with_schema",
+            return_value=fake,
+        ),
+        patch("a2a_orchestrator.orchestrator.planner.get_client", return_value=MagicMock()),
+    ):
         steps = build_plan("fetch this: https://example.com/ramen", cards)
     assert len(steps) == 1
     assert steps[0] == PlanStep(
@@ -50,10 +60,13 @@ def test_build_plan_returns_steps():
 
 def test_build_plan_empty_is_fine():
     cards = [_card("recipe-url", "parse_recipe_url")]
-    with patch(
-        "a2a_orchestrator.orchestrator.planner.call_with_schema",
-        return_value={"steps": []},
-    ), patch("a2a_orchestrator.orchestrator.planner.get_client", return_value=MagicMock()):
+    with (
+        patch(
+            "a2a_orchestrator.orchestrator.planner.call_with_schema",
+            return_value={"steps": []},
+        ),
+        patch("a2a_orchestrator.orchestrator.planner.get_client", return_value=MagicMock()),
+    ):
         steps = build_plan("just say hi", cards)
     assert steps == []
 
@@ -77,12 +90,15 @@ async def test_synthesize_streams_text():
     class _FakeAsyncClient:
         pass
 
-    with patch(
-        "a2a_orchestrator.orchestrator.planner.stream_text",
-        return_value=_gen(),
-    ), patch(
-        "a2a_orchestrator.orchestrator.planner.get_async_client",
-        return_value=_FakeAsyncClient(),
+    with (
+        patch(
+            "a2a_orchestrator.orchestrator.planner.stream_text",
+            return_value=_gen(),
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.planner.get_async_client",
+            return_value=_FakeAsyncClient(),
+        ),
     ):
         chunks = []
         async for c in synthesize("q", step_outputs={1: "ok"}):

@@ -87,9 +87,7 @@ def substitute_placeholders(text: str, outputs: dict[int, str]) -> str:
     return _PLACEHOLDER_RE.sub(_repl, text)
 
 
-async def synthesize(
-    user_request: str, *, step_outputs: dict[int, str]
-) -> AsyncIterator[str]:
+async def synthesize(user_request: str, *, step_outputs: dict[int, str]) -> AsyncIterator[str]:
     outputs_text = "\n\n".join(
         f"Step {n} output:\n{out}" for n, out in sorted(step_outputs.items())
     )

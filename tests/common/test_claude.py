@@ -17,9 +17,7 @@ def _fake_tool_response(tool_name: str, tool_input: dict) -> MagicMock:
 
 def test_call_with_schema_returns_tool_input(monkeypatch):
     client = MagicMock()
-    client.messages.create.return_value = _fake_tool_response(
-        "emit_result", {"title": "t", "n": 1}
-    )
+    client.messages.create.return_value = _fake_tool_response("emit_result", {"title": "t", "n": 1})
 
     result = call_with_schema(
         client,

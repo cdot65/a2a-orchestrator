@@ -34,11 +34,13 @@ def call_with_schema(
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": user}],
-        tools=[{
-            "name": tool_name,
-            "description": tool_description,
-            "input_schema": schema,
-        }],
+        tools=[
+            {
+                "name": tool_name,
+                "description": tool_description,
+                "input_schema": schema,
+            }
+        ],
         tool_choice={"type": "tool", "name": tool_name},
     )
     for block in msg.content:

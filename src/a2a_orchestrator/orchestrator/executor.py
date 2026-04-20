@@ -156,7 +156,7 @@ class OrchestratorExecutor:
             return
 
         plan_summary = (
-            "Plan: " + "; ".join(f"{i+1}) {s.agent}:{s.skill}" for i, s in enumerate(plan))
+            "Plan: " + "; ".join(f"{i + 1}) {s.agent}:{s.skill}" for i, s in enumerate(plan))
             if plan
             else "Plan: (none — synthesizing directly)"
         )
@@ -194,9 +194,7 @@ class OrchestratorExecutor:
                 await event_queue.enqueue_event(_TextEvent("text", chunk))
         except Exception as e:  # noqa: BLE001
             log.exception("synthesis_failed")
-            await event_queue.enqueue_event(
-                _StatusEvent("status", "failed", f"synthesis: {e}")
-            )
+            await event_queue.enqueue_event(_StatusEvent("status", "failed", f"synthesis: {e}"))
             return
 
         await event_queue.enqueue_event(_StatusEvent("status", "completed"))

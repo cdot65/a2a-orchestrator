@@ -76,9 +76,7 @@ class RecipeUrlExecutor:
                 html = resp.text
         except httpx.HTTPError as e:
             log.warning("fetch_failed", url=user_text, error=str(e))
-            await event_queue.enqueue_event(
-                _StatusEvent("status", "failed", f"fetch failed: {e}")
-            )
+            await event_queue.enqueue_event(_StatusEvent("status", "failed", f"fetch failed: {e}"))
             return
 
         await event_queue.enqueue_event(_StatusEvent("status", "working", "extracting"))

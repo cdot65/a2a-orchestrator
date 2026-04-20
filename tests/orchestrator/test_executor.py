@@ -51,15 +51,23 @@ async def test_executor_plans_dispatches_synthesizes():
 
     q = _FakeQueue()
 
-    with patch(
-        "a2a_orchestrator.orchestrator.executor.discover_agents",
-        new=AsyncMock(return_value=cards),
-    ), patch(
-        "a2a_orchestrator.orchestrator.executor.build_plan", return_value=plan,
-    ), patch(
-        "a2a_orchestrator.orchestrator.executor.dispatch_step", side_effect=_fake_dispatch,
-    ), patch(
-        "a2a_orchestrator.orchestrator.executor.synthesize", side_effect=_fake_synth,
+    with (
+        patch(
+            "a2a_orchestrator.orchestrator.executor.discover_agents",
+            new=AsyncMock(return_value=cards),
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.build_plan",
+            return_value=plan,
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.dispatch_step",
+            side_effect=_fake_dispatch,
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.synthesize",
+            side_effect=_fake_synth,
+        ),
     ):
         await OrchestratorExecutor().execute(_Ctx("scrape https://x/y"), q)
 
@@ -93,15 +101,23 @@ async def test_executor_substitutes_placeholders():
 
     q = _FakeQueue()
 
-    with patch(
-        "a2a_orchestrator.orchestrator.executor.discover_agents",
-        new=AsyncMock(return_value=cards),
-    ), patch(
-        "a2a_orchestrator.orchestrator.executor.build_plan", return_value=plan,
-    ), patch(
-        "a2a_orchestrator.orchestrator.executor.dispatch_step", side_effect=_fake_dispatch,
-    ), patch(
-        "a2a_orchestrator.orchestrator.executor.synthesize", side_effect=_fake_synth,
+    with (
+        patch(
+            "a2a_orchestrator.orchestrator.executor.discover_agents",
+            new=AsyncMock(return_value=cards),
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.build_plan",
+            return_value=plan,
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.dispatch_step",
+            side_effect=_fake_dispatch,
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.synthesize",
+            side_effect=_fake_synth,
+        ),
     ):
         await OrchestratorExecutor().execute(_Ctx("go"), q)
 
@@ -118,13 +134,19 @@ async def test_executor_aborts_on_step_failure():
 
     q = _FakeQueue()
 
-    with patch(
-        "a2a_orchestrator.orchestrator.executor.discover_agents",
-        new=AsyncMock(return_value=cards),
-    ), patch(
-        "a2a_orchestrator.orchestrator.executor.build_plan", return_value=plan,
-    ), patch(
-        "a2a_orchestrator.orchestrator.executor.dispatch_step", side_effect=_fake_dispatch,
+    with (
+        patch(
+            "a2a_orchestrator.orchestrator.executor.discover_agents",
+            new=AsyncMock(return_value=cards),
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.build_plan",
+            return_value=plan,
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.dispatch_step",
+            side_effect=_fake_dispatch,
+        ),
     ):
         await OrchestratorExecutor().execute(_Ctx("go"), q)
 

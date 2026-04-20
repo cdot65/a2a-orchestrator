@@ -54,10 +54,13 @@ async def test_executor_fetches_extracts_and_structures():
     queue = _FakeQueue()
     ctx = _FakeContext(SAMPLE_URL)
 
-    with patch(
-        "a2a_orchestrator.recipe_url.executor.call_with_schema",
-        return_value=_payload(),
-    ), patch("a2a_orchestrator.recipe_url.executor.get_client", return_value=MagicMock()):
+    with (
+        patch(
+            "a2a_orchestrator.recipe_url.executor.call_with_schema",
+            return_value=_payload(),
+        ),
+        patch("a2a_orchestrator.recipe_url.executor.get_client", return_value=MagicMock()),
+    ):
         await RecipeUrlExecutor().execute(ctx, queue)
 
     artifact_events = [e for e in queue.events if getattr(e, "kind", "") == "artifact"]
@@ -101,10 +104,13 @@ async def test_executor_fails_on_claude_validation_error():
 
     bad_payload = {"title": "x"}  # missing required fields
 
-    with patch(
-        "a2a_orchestrator.recipe_url.executor.call_with_schema",
-        return_value=bad_payload,
-    ), patch("a2a_orchestrator.recipe_url.executor.get_client", return_value=MagicMock()):
+    with (
+        patch(
+            "a2a_orchestrator.recipe_url.executor.call_with_schema",
+            return_value=bad_payload,
+        ),
+        patch("a2a_orchestrator.recipe_url.executor.get_client", return_value=MagicMock()),
+    ):
         await RecipeUrlExecutor().execute(ctx, queue)
 
     statuses = [getattr(e, "state", None) for e in queue.events]
@@ -121,10 +127,13 @@ async def test_executor_fails_on_claude_runtime_error():
     queue = _FakeQueue()
     ctx = _FakeContext(SAMPLE_URL)
 
-    with patch(
-        "a2a_orchestrator.recipe_url.executor.call_with_schema",
-        side_effect=RuntimeError("no tool_use"),
-    ), patch("a2a_orchestrator.recipe_url.executor.get_client", return_value=MagicMock()):
+    with (
+        patch(
+            "a2a_orchestrator.recipe_url.executor.call_with_schema",
+            side_effect=RuntimeError("no tool_use"),
+        ),
+        patch("a2a_orchestrator.recipe_url.executor.get_client", return_value=MagicMock()),
+    ):
         await RecipeUrlExecutor().execute(ctx, queue)
 
     statuses = [getattr(e, "state", None) for e in queue.events]

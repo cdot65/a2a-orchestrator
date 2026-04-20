@@ -46,12 +46,13 @@ async def test_executor_generates_and_persists_recipe(monkeypatch):
 
     payload = _recipe_payload()
 
-    with patch(
-        "a2a_orchestrator.recipe_gen.executor.call_with_schema",
-        return_value=payload,
-    ) as claude_mock, patch(
-        "a2a_orchestrator.recipe_gen.executor.get_client"
-    ) as client_mock:
+    with (
+        patch(
+            "a2a_orchestrator.recipe_gen.executor.call_with_schema",
+            return_value=payload,
+        ) as claude_mock,
+        patch("a2a_orchestrator.recipe_gen.executor.get_client") as client_mock,
+    ):
         client_mock.return_value = MagicMock()
         executor = RecipeGenExecutor()
         await executor.execute(ctx, queue)
@@ -63,6 +64,7 @@ async def test_executor_generates_and_persists_recipe(monkeypatch):
 
     import os
     from pathlib import Path
+
     recipes_dir = Path(os.environ["RECIPES_DIR"])
     files = list(recipes_dir.glob("spicy-vegan-ramen-*.json"))
     assert len(files) == 1
@@ -78,10 +80,13 @@ async def test_executor_fails_task_on_claude_error():
     queue = _FakeQueue()
     ctx = _FakeContext("A recipe")
 
-    with patch(
-        "a2a_orchestrator.recipe_gen.executor.call_with_schema",
-        side_effect=RuntimeError("boom"),
-    ), patch("a2a_orchestrator.recipe_gen.executor.get_client"):
+    with (
+        patch(
+            "a2a_orchestrator.recipe_gen.executor.call_with_schema",
+            side_effect=RuntimeError("boom"),
+        ),
+        patch("a2a_orchestrator.recipe_gen.executor.get_client"),
+    ):
         executor = RecipeGenExecutor()
         await executor.execute(ctx, queue)
 
