@@ -1,0 +1,103 @@
+site_name: A2A Orchestrator
+site_url: https://cdot65.github.io/a2a-orchestrator/
+site_description: Reference implementation of an A2A-protocol orchestrator that plans with Claude, dispatches to specialist agents, and synthesizes a final answer.
+repo_name: cdot65/a2a-orchestrator
+repo_url: https://github.com/cdot65/a2a-orchestrator
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+  icon:
+    repo: fontawesome/brands/github
+
+extra_css:
+  - css/custom.css
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.mark
+  - pymdownx.critic
+  - pymdownx.keys
+  - attr_list
+  - md_in_html
+  - tables
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+not_in_nav: |
+  /curl-examples.md
+  /superpowers/**
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Configuration: getting-started/configuration.md
+      - Quick Start: getting-started/quick-start.md
+  - Architecture:
+      - Overview: architecture/overview.md
+      - A2A Protocol: architecture/a2a-protocol.md
+      - Orchestration Loop: architecture/orchestration-loop.md
+      - Discovery: architecture/discovery.md
+      - Streaming: architecture/streaming.md
+      - Conversation History: architecture/history.md
+      - Rate Limiting: architecture/rate-limiting.md
+  - Agents:
+      - Overview: agents/overview.md
+      - Orchestrator: agents/orchestrator.md
+      - Recipe URL: agents/recipe-url.md
+      - Recipe Gen: agents/recipe-gen.md
+      - Shell: agents/shell.md
+  - API Reference:
+      - A2A Surface: api/a2a.md
+      - OpenAI-Compatible: api/openai-compat.md
+      - OpenAPI Specs: api/openapi.md
+      - curl Examples: api/curl-examples.md
+  - Deployment:
+      - Local: deployment/local.md
+      - Docker: deployment/docker.md
+      - Kubernetes (Example): deployment/kubernetes.md
+  - Development:
+      - Layout: development/layout.md
+      - Testing: development/testing.md
+      - Contributing: development/contributing.md

@@ -96,20 +96,18 @@ curl -s -X POST http://localhost:8000/v1/chat/completions \
   }' | jq .
 ```
 
-## Deploy to Kubernetes
+## Docs
 
-Live at `https://a2a.dev.cdot.io` on the Talos home cluster. CI (`.github/workflows/deploy-talos.yml`) deploys automatically on every push to `main`.
+Full project documentation lives at [https://cdot65.github.io/a2a-orchestrator/](https://cdot65.github.io/a2a-orchestrator/) — architecture, agent internals, OpenAI-compat surface, and deployment notes.
 
-- **Full instructions:** [`k8s/README.md`](k8s/README.md)
-- **One-time cluster setup:** [`k8s/cluster-setup/README.md`](k8s/cluster-setup/README.md) (namespace, secrets, runner RBAC)
+## Deploy to Kubernetes (example)
 
-Quick manual redeploy:
+The `k8s/` directory contains example manifests for deploying the orchestrator + the two stateless agents behind Traefik on a Talos cluster. Treat as a reference, not a turnkey deploy.
 
-```bash
-kubectl -n a2a rollout restart deployment/orchestrator deployment/recipe-url deployment/recipe-gen
-```
+- **Manifests + walkthrough:** [`k8s/README.md`](k8s/README.md)
+- **Cluster prerequisites:** [`k8s/cluster-setup/README.md`](k8s/cluster-setup/README.md)
 
-The shell agent is excluded from the k8s deployment (requires Docker-in-Docker for sandboxing).
+The shell agent is excluded from the k8s example (requires Docker-in-Docker for sandboxing).
 
 ## Test
 
