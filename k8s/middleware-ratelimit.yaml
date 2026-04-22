@@ -1,0 +1,23 @@
+# Per-source-IP rate limit applied to the a2a orchestrator IngressRoute.
+#
+# Sizing:
+#   Anthropic key is Tier 4: 4000 RPM.
+#   Each orchestrator request fans out to ~3 Claude calls (plan + specialist + synth).
+#   20 req/s * 60 * 3 = 3600 Anthropic calls/min, ~10% under the ceiling.
+#
+# This only protects external traffic going through Traefik on
+# a2a.dev.cdot.io. Pods hitting orchestrator.a2a.svc.cluster.local
+# bypass Traefik entirely.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: a2a-ratelimit
+  namespace: a2a
+spec:
+  rateLimit:
+    average: 20       # sustained req/sec per source IP
+    burst: 80         # token-bucket burst
+    period: 1s
+    sourceCriterion:
+      ipStrategy:
+        depth: 1      # one reverse proxy in front (Traefik itself via MetalLB)

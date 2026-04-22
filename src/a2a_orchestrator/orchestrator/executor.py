@@ -121,10 +121,31 @@ def _message_to_text(msg) -> str:
     return " ".join(pieces)
 
 
+_MAX_HISTORY_TURNS = 20  # cap per-context to bound memory
+_HISTORY: dict[str, list[tuple[str, str]]] = {}
+
+
+def _build_transcript(history: list[tuple[str, str]], current_user_text: str) -> str:
+    if not history:
+        return current_user_text
+    lines = [f"{role.upper()}: {text}" for role, text in history]
+    lines.append(f"USER: {current_user_text}")
+    return "\n\n".join(lines)
+
+
 class OrchestratorExecutor:
     async def execute(self, context: Any, event_queue: Any) -> None:
         user_text = context.get_user_input()
-        log.info("task_started", task_id=context.task_id, prompt=user_text[:160])
+        ctx_id = context.context_id
+        history = list(_HISTORY.get(ctx_id, [])) if ctx_id else []
+        planner_input = _build_transcript(history, user_text) if history else user_text
+        log.info(
+            "task_started",
+            task_id=context.task_id,
+            context_id=ctx_id,
+            history_turns=len(history),
+            prompt=user_text[:160],
+        )
 
         await event_queue.enqueue_event(
             status_event(
@@ -134,12 +155,17 @@ class OrchestratorExecutor:
                 message="discovering",
             )
         )
-        ports = [
-            int(p)
-            for p in os.environ.get("A2A_DISCOVERY_PORTS", "8001,8002,8003").split(",")
-            if p.strip()
-        ]
-        cards = await discover_agents(ports)
+        urls_env = os.environ.get("A2A_DISCOVERY_URLS", "").strip()
+        if urls_env:
+            base_urls = [u.strip() for u in urls_env.split(",") if u.strip()]
+        else:
+            ports = [
+                int(p)
+                for p in os.environ.get("A2A_DISCOVERY_PORTS", "8001,8002,8003").split(",")
+                if p.strip()
+            ]
+            base_urls = [f"http://localhost:{p}" for p in ports]
+        cards = await discover_agents(base_urls)
         log.info("discovery", task_id=context.task_id, agents=[c["name"] for c in cards])
 
         await event_queue.enqueue_event(
@@ -151,7 +177,7 @@ class OrchestratorExecutor:
             )
         )
         try:
-            plan: list[PlanStep] = build_plan(user_text, cards)
+            plan: list[PlanStep] = build_plan(planner_input, cards)
         except Exception as e:  # noqa: BLE001
             log.exception("plan_failed")
             await event_queue.enqueue_event(
@@ -230,8 +256,10 @@ class OrchestratorExecutor:
                 message="synthesizing",
             )
         )
+        reply_parts: list[str] = []
         try:
-            async for chunk in synthesize(user_text, step_outputs=step_outputs):
+            async for chunk in synthesize(planner_input, step_outputs=step_outputs):
+                reply_parts.append(chunk)
                 await event_queue.enqueue_event(
                     text_update(
                         task_id=context.task_id,
@@ -252,6 +280,13 @@ class OrchestratorExecutor:
             )
             return
 
+        if ctx_id:
+            turns = _HISTORY.setdefault(ctx_id, [])
+            turns.append(("user", user_text))
+            turns.append(("assistant", "".join(reply_parts)))
+            if len(turns) > _MAX_HISTORY_TURNS:
+                del turns[: len(turns) - _MAX_HISTORY_TURNS]
+
         await event_queue.enqueue_event(
             status_event(
                 task_id=context.task_id,
@@ -260,7 +295,12 @@ class OrchestratorExecutor:
                 final=True,
             )
         )
-        log.info("task_completed", task_id=context.task_id)
+        log.info(
+            "task_completed",
+            task_id=context.task_id,
+            context_id=ctx_id,
+            total_history_turns=len(_HISTORY.get(ctx_id, [])) if ctx_id else 0,
+        )
 
     async def cancel(self, context: Any, event_queue: Any) -> None:
         log.info("task_cancelled")

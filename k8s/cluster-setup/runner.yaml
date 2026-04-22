@@ -1,0 +1,126 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: a2a-runner-scripts
+  namespace: github-runner
+  labels:
+    app: a2a-runner
+data:
+  entrypoint.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    REPO_URL="https://github.com/cdot65/a2a-orchestrator"
+    RUNNER_NAME="talos-a2a-runner"
+    LABELS="self-hosted,talos"
+
+    # Get a fresh registration token from the GitHub API
+    echo "Requesting runner registration token..."
+    REG_TOKEN=$(curl -s -X POST \
+      -H "Authorization: token ${GITHUB_PAT}" \
+      -H "Accept: application/vnd.github.v3+json" \
+      "https://api.github.com/repos/cdot65/a2a-orchestrator/actions/runners/registration-token" \
+      | jq -r .token)
+
+    if [ -z "$REG_TOKEN" ] || [ "$REG_TOKEN" = "null" ]; then
+      echo "ERROR: Failed to get registration token. Check GITHUB_PAT has 'repo' scope."
+      exit 1
+    fi
+
+    echo "Configuring runner..."
+    ./config.sh \
+      --url "$REPO_URL" \
+      --token "$REG_TOKEN" \
+      --name "$RUNNER_NAME" \
+      --labels "$LABELS" \
+      --unattended \
+      --replace
+
+    # Clean deregistration on shutdown
+    cleanup() {
+      echo "Removing runner..."
+      ./config.sh remove --token "$REG_TOKEN" || true
+    }
+    trap cleanup SIGTERM SIGINT
+
+    echo "Starting runner..."
+    ./run.sh &
+    wait $!
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: a2a-runner
+  namespace: github-runner
+  labels:
+    app: a2a-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: a2a-runner
+  template:
+    metadata:
+      labels:
+        app: a2a-runner
+    spec:
+      serviceAccountName: github-runner-sa
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: runner
+          image: ghcr.io/actions/actions-runner:2.322.0
+          command: ["/bin/bash", "/scripts/entrypoint.sh"]
+          env:
+            - name: GITHUB_PAT
+              valueFrom:
+                secretKeyRef:
+                  name: github-runner-secret
+                  key: GITHUB_PAT
+            - name: GHCR_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: github-runner-secret
+                  key: GHCR_USERNAME
+            - name: GHCR_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: github-runner-secret
+                  key: GITHUB_PAT
+            - name: DOCKER_HOST
+              value: tcp://localhost:2375
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+            - name: work
+              mountPath: /home/runner/_work
+        - name: dind
+          image: docker:27-dind
+          securityContext:
+            privileged: true
+          env:
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+          volumeMounts:
+            - name: work
+              mountPath: /home/runner/_work
+      volumes:
+        - name: scripts
+          configMap:
+            name: a2a-runner-scripts
+            defaultMode: 0755
+        - name: work
+          emptyDir: {}

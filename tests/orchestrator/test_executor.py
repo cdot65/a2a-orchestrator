@@ -155,3 +155,68 @@ async def test_executor_aborts_on_step_failure():
 
     states = [get_state(e) for e in q.events if isinstance(e, TaskStatusUpdateEvent)]
     assert "failed" in states
+
+
+async def test_executor_replays_context_history_on_repeat_calls(monkeypatch):
+    """Second call with the same context_id should see prior turn in planner input."""
+    from a2a_orchestrator.orchestrator import executor as ex
+
+    monkeypatch.setattr(ex, "_HISTORY", {})
+
+    cards = [_card("recipe-gen", 8002, "generate_recipe")]
+
+    captured_inputs: list[str] = []
+
+    def _fake_build_plan(user_request, _cards):
+        captured_inputs.append(user_request)
+        return [PlanStep(agent="recipe-gen", skill="generate_recipe", input="x")]
+
+    async def _fake_dispatch(agent_url, skill, text, on_event):
+        return '{"title":"X"}'
+
+    async def _fake_synth(q, *, step_outputs):
+        for c in ["answer-", q[:20]]:
+            yield c
+
+    class _CtxWithId:
+        def __init__(self, text: str, context_id: str):
+            self.task_id = "t-" + context_id
+            self.context_id = context_id
+            self._t = text
+
+        def get_user_input(self) -> str:
+            return self._t
+
+    with (
+        patch(
+            "a2a_orchestrator.orchestrator.executor.discover_agents",
+            new=AsyncMock(return_value=cards),
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.build_plan",
+            side_effect=_fake_build_plan,
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.dispatch_step",
+            side_effect=_fake_dispatch,
+        ),
+        patch(
+            "a2a_orchestrator.orchestrator.executor.synthesize",
+            side_effect=_fake_synth,
+        ),
+    ):
+        # Turn 1: no history yet
+        await OrchestratorExecutor().execute(_CtxWithId("My name is Ada.", "ctx-1"), _FakeQueue())
+        # Turn 2: same context_id, planner should see prior transcript
+        await OrchestratorExecutor().execute(_CtxWithId("What's my name?", "ctx-1"), _FakeQueue())
+        # Turn 3: different context_id, should NOT see ctx-1 history
+        await OrchestratorExecutor().execute(_CtxWithId("Hello", "ctx-2"), _FakeQueue())
+
+    # Turn 1: no prior history
+    assert captured_inputs[0] == "My name is Ada."
+    # Turn 2: prior user + assistant turn + new user message in transcript
+    assert "USER: My name is Ada." in captured_inputs[1]
+    assert "ASSISTANT:" in captured_inputs[1]
+    assert "USER: What's my name?" in captured_inputs[1]
+    # Turn 3: different context — no history
+    assert captured_inputs[2] == "Hello"

@@ -42,27 +42,34 @@ def build_agent_card(
     }
 
 
-async def _fetch_card(client: httpx.AsyncClient, port: int) -> dict[str, Any] | None:
-    url = f"http://localhost:{port}{AGENT_CARD_PATH}"
+async def _fetch_card(client: httpx.AsyncClient, base_url: str) -> dict[str, Any] | None:
+    url = base_url.rstrip("/") + AGENT_CARD_PATH
     try:
         resp = await client.get(url, timeout=2.0)
     except httpx.HTTPError as e:
-        log.warning("discovery failed for port %d: %s", port, e)
+        log.warning("discovery failed for %s: %s", base_url, e)
         return None
     if resp.status_code != 200:
-        log.warning("discovery non-200 for port %d: %s", port, resp.status_code)
+        log.warning("discovery non-200 for %s: %s", base_url, resp.status_code)
         return None
     try:
-        return resp.json()
+        card = resp.json()
     except ValueError:
-        log.warning("discovery: port %d returned non-JSON", port)
+        log.warning("discovery: %s returned non-JSON", base_url)
         return None
+    # Agents advertise themselves at http://localhost:PORT in their cards,
+    # which is the wrong URL from any other pod/host. Overwrite with the URL
+    # the discoverer actually reached them at so callers can use card["url"]
+    # directly for dispatch.
+    if isinstance(card, dict):
+        card["url"] = base_url.rstrip("/")
+    return card
 
 
-async def discover_agents(ports: list[int]) -> list[dict[str, Any]]:
+async def discover_agents(base_urls: list[str]) -> list[dict[str, Any]]:
     async with httpx.AsyncClient() as client:
         results = await asyncio.gather(
-            *(_fetch_card(client, p) for p in ports),
+            *(_fetch_card(client, url) for url in base_urls),
             return_exceptions=True,
         )
     return [c for c in results if isinstance(c, dict)]

@@ -1,0 +1,23 @@
+# Traefik IngressRoute for a2a on Talos.
+#
+# Requires the wildcard-cdot-io-tls secret in namespace a2a.
+# Mirror it from truffles-dev before applying (see k8s/cluster-setup/README.md).
+
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: a2a-orchestrator
+  namespace: a2a
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`a2a.dev.cdot.io`)
+      kind: Rule
+      middlewares:
+        - name: a2a-ratelimit
+      services:
+        - name: orchestrator
+          port: 8000
+  tls:
+    secretName: wildcard-cdot-io-tls

@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from a2a_orchestrator.common.logging import configure_logging
+from a2a_orchestrator.common.ratelimit import build_rate_limit_middleware
 from a2a_orchestrator.orchestrator.executor import OrchestratorExecutor, build_card
 from a2a_orchestrator.orchestrator.openai_compat import router as openai_router
 
@@ -47,7 +48,20 @@ def main() -> None:
         docs_url="/v1/docs",
         redoc_url=None,
     )
+
     app.include_router(openai_router)
+
+    # Per-source-IP rate limit at the outer ASGI layer so it covers both the
+    # OpenAI-compat router AND the mounted A2A Starlette sub-app. Sized to
+    # stay under the Anthropic Tier-4 ceiling accounting for the ~3x fan-out
+    # per orchestrator request (plan + specialist + synthesize).
+    # Override via RATE_LIMIT env, comma-separated (e.g., "1200/minute,20/second").
+    limit_specs = [
+        s.strip()
+        for s in os.environ.get("RATE_LIMIT", "1200/minute").split(",")
+        if s.strip()
+    ]
+    app.add_middleware(build_rate_limit_middleware, limits=limit_specs)
 
     @app.get("/openapi.json", include_in_schema=False)
     def _serve_openapi() -> JSONResponse:

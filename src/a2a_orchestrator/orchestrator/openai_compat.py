@@ -198,23 +198,50 @@ async def list_models() -> dict:
     }
 
 
-@router.post("/v1/chat/completions")
+@router.post(
+    "/v1/chat/completions",
+    response_model=ChatCompletionResponse,
+    responses={
+        200: {
+            "description": (
+                "When stream=false, returns a single ChatCompletionResponse "
+                "(application/json). When stream=true, returns text/event-stream "
+                "with one ChatCompletionChunk per data: frame, terminated by "
+                "'data: [DONE]'."
+            ),
+            "content": {
+                "application/json": {
+                    "schema": {"$ref": "#/components/schemas/ChatCompletionResponse"},
+                },
+                "text/event-stream": {
+                    "schema": {"$ref": "#/components/schemas/ChatCompletionChunk"},
+                },
+            },
+        },
+    },
+)
 async def chat_completions(request: ChatCompletionRequest):
-    # Extract last user message
-    user_content: str | None = None
-    for msg in reversed(request.messages):
-        if msg.role == "user":
-            user_content = msg.content
-            break
-
-    if not user_content:
+    if not request.messages:
+        raise HTTPException(status_code=400, detail="No messages provided.")
+    if not any(m.role == "user" for m in request.messages):
         raise HTTPException(status_code=400, detail="No user message found in messages.")
+
+    # Build a single transcript string from the full message history so the
+    # planner and synthesizer both see prior turns. This enables standard
+    # OpenAI-style multi-turn where the client passes back the full history
+    # on each request.
+    transcript_parts: list[str] = []
+    for msg in request.messages:
+        role = msg.role.upper() if msg.role != "assistant" else "ASSISTANT"
+        transcript_parts.append(f"{role}: {msg.content}")
+    user_content = "\n\n".join(transcript_parts)
 
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time.time())
     model = request.model
 
     if request.stream:
+
         async def sse_gen():
             first = True
             task_id = uuid4().hex
