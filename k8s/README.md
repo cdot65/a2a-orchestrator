@@ -10,17 +10,16 @@ The shell agent spawns Docker containers for command sandboxing. That pattern is
 
 See [`k8s/cluster-setup/README.md`](cluster-setup/README.md) for the steps you run once: creating the namespace, mirroring the GHCR pull secret and wildcard TLS secret from `truffles-dev`, creating the Anthropic API key secret, and deploying the self-hosted runner RBAC + Deployment.
 
-## Per-deploy (automated via CI)
+## Per-deploy (manual)
 
-`.github/workflows/deploy-talos.yml` runs on every push to `main` that touches `src/**`, `Dockerfile`, `k8s/**`, etc., and on `workflow_dispatch`. It:
+This repo intentionally ships **no** auto-deploy workflow. Build and push the image yourself:
 
-1. Builds and pushes `ghcr.io/cdot65/a2a-orchestrator:talos` (+ SHA tag) via `docker buildx`.
-2. Runs `kubectl rollout restart` on all three Deployments in `a2a`.
-3. Waits for rollout and pod readiness.
+```bash
+docker buildx build --platform linux/amd64 --push \
+  --tag ghcr.io/<you>/a2a-orchestrator:latest .
+```
 
-Runner: self-hosted on Talos (`[self-hosted, talos]` labels), registered to this repo by the `a2a-runner` Deployment.
-
-## Manual redeploy
+Then roll the deployments:
 
 ```bash
 kubectl -n a2a rollout restart deployment/orchestrator
